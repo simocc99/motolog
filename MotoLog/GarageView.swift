@@ -148,7 +148,7 @@ struct BikeDetailView: View {
                 Image(uiImage: img).resizable().scaledToFit().frame(maxHeight: 150)
                     .shadow(color: Theme.accent.opacity(0.25), radius: 16)
             } else {
-                IconBadge(icon: "scooter", size: 64)
+                IconBadge(icon: Theme.bikeSymbol, size: 64)
             }
             if processing { ProgressView("Ritaglio la moto…") }
             HStack {
@@ -211,15 +211,20 @@ struct BikeDetailView: View {
                 Stepper(value: tankBinding(bike), in: 0...40, step: 0.5) {
                     LabeledContent("Serbatoio", value: (bike.tankLiters ?? 0) > 0 ? String(format: "%.1f L", bike.tankLiters ?? 0) : "non impostato")
                 }
-                if let full = store.autonomy(for: bike) {
-                    LabeledContent("Autonomia con un pieno", value: "\(Int(full)) km")
-                    if let left = store.remainingRange(for: bike) {
-                        LabeledContent("Ancora per circa", value: "\(Int(max(left, 0))) km")
-                            .foregroundStyle(left < full * 0.15 ? .orange : .primary)
+                if let st = store.fuelState(for: bike) {
+                    LabeledContent("Benzina stimata", value: String(format: "≈ %.1f L su %.1f", st.liters, st.tank))
+                    LabeledContent("Ancora per circa", value: "\(Int(st.range)) km")
+                        .foregroundStyle(st.low ? .orange : .primary)
+                    if !st.learned {
+                        Text("Consumo non ancora noto: uso 5,5 L/100 km. Dopo due pieni lo calcolo dai tuoi rifornimenti.")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                 } else {
-                    Text("Imposta il serbatoio e registra almeno due pieni: l'app calcola consumo e autonomia da sola.")
+                    Text("Imposta il serbatoio e registra un pieno: da lì stimo benzina e km rimasti in base ai km e alla velocità.")
                         .font(.caption).foregroundStyle(.secondary)
+                }
+                if let full = store.autonomy(for: bike) {
+                    LabeledContent("Autonomia con un pieno", value: "\(Int(full)) km")
                 }
             }
 
@@ -286,7 +291,7 @@ struct BikeDetailView: View {
                     HStack {
                         VStack(alignment: .leading) {
                             Text(f.date.shortDate)
-                            Text("\(Int(f.odometerKm)) km").font(.caption).foregroundStyle(.secondary)
+                            Text("\(Int(f.odometerKm)) km" + (f.isFull == false ? " · parziale" : "")).font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
                         VStack(alignment: .trailing) {
@@ -381,15 +386,21 @@ private struct AddFuelSheet: View {
     @State private var cost = ""
     @State private var odo = ""
     @State private var date = Date()
+    @State private var full = true
 
     var body: some View {
         NavigationStack {
             Form {
+                ReceiptScanButton { r in
+                    if let l = r.liters { liters = String(format: "%.2f", l) }
+                    if let c = r.cost { cost = String(format: "%.2f", c) }
+                }
                 DatePicker("Data", selection: $date, displayedComponents: .date)
                 TextField("Litri", text: $liters).keyboardType(.decimalPad)
                 TextField("Costo (€)", text: $cost).keyboardType(.decimalPad)
                 TextField("Chilometri moto (\(Int(odometer)))", text: $odo).keyboardType(.decimalPad)
-                Text("Per un calcolo corretto del consumo, fai sempre il pieno.")
+                Toggle("Ho fatto il pieno", isOn: $full)
+                Text("Il consumo si calcola tra un pieno e l'altro.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             .navigationTitle("Rifornimento")
@@ -398,7 +409,7 @@ private struct AddFuelSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Salva") {
                         store.fuel.append(FuelEntry(bikeID: bike.id, date: date, liters: number(liters),
-                                                    cost: number(cost), odometerKm: odo.isEmpty ? odometer : number(odo)))
+                                                    cost: number(cost), odometerKm: odo.isEmpty ? odometer : number(odo), isFull: full))
                         dismiss()
                     }
                     .disabled(number(liters) <= 0)

@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import Vision
 import CoreImage
+import CoreLocation
 
 // MARK: Foto della moto
 
@@ -77,12 +78,25 @@ struct BikeThumb: View {
                 .resizable().scaledToFit()
                 .frame(width: size * 1.5, height: size)
         } else {
-            IconBadge(icon: "scooter", size: size)
+            IconBadge(icon: Theme.bikeSymbol, size: size)
         }
     }
 }
 
 // MARK: Autonomia
+
+struct FuelState {
+    let liters: Double
+    let range: Double
+    let tank: Double
+    let learned: Bool   // false = consumo non ancora noto, uso un valore standard
+    var low: Bool { liters < tank * 0.2 }
+}
+
+extension Theme {
+    /// SF Symbol "motorcycle" esiste solo dalle versioni recenti di iOS.
+    static var bikeSymbol: String { UIImage(systemName: "motorcycle") != nil ? "motorcycle" : "bicycle" }
+}
 
 extension DataStore {
     /// Km percorribili con un pieno (serve serbatoio e almeno due rifornimenti).
@@ -91,12 +105,50 @@ extension DataStore {
         return tank / c * 100
     }
 
-    /// Km stimati prima di restare a secco, contando anche il giro in corso.
-    func remainingRange(for bike: Bike, extraKm: Double = 0) -> Double? {
-        guard let full = autonomy(for: bike),
-              let last = fuel.filter({ $0.bikeID == bike.id }).max(by: { $0.date < $1.date }) else { return nil }
-        let since = max(0, odometer(of: bike) + extraKm - last.odometerKm)
-        return full - since
+    /// Benzina stimata nel serbatoio e km rimasti.
+    /// Parte dall'ultimo pieno, toglie il consumo dei km fatti (più alto oltre i ~80 km/h) e somma i rifornimenti parziali.
+    func fuelState(for bike: Bike, live: [TrackPoint] = []) -> FuelState? {
+        guard let tank = bike.tankLiters, tank > 0 else { return nil }
+        let learned = consumption(for: bike)
+        let cons = learned ?? 5.5
+        var level: Double?
+        var last: Date?
+        for e in fuel.filter({ $0.bikeID == bike.id }).sorted(by: { $0.date < $1.date }) {
+            if let l = level, let ld = last {
+                level = max(0, l - usedKm(bike.id, from: ld, to: e.date, live: []) * cons / 100)
+            }
+            if e.isFull != false { level = tank } else if let l = level { level = min(tank, l + e.liters) }
+            last = e.date
+        }
+        guard let l0 = level, let ld = last else { return nil }
+        let liters = max(0, l0 - usedKm(bike.id, from: ld, to: Date(), live: live) * cons / 100)
+        return FuelState(liters: liters, range: liters / cons * 100, tank: tank, learned: learned != nil)
+    }
+
+    func remainingRange(for bike: Bike) -> Double? { fuelState(for: bike)?.range }
+
+    /// Consumo "pesato": i km veloci contano di più, quelli lenti di meno.
+    private static func speedFactor(_ ms: Double) -> Double {
+        min(max(1 + 0.004 * (ms * 3.6 - 80), 0.85), 1.5)
+    }
+
+    private func weightedKm(_ points: [TrackPoint], from: Date, to: Date) -> Double {
+        guard points.count > 1 else { return 0 }
+        var sum = 0.0
+        for i in 1..<points.count {
+            let a = points[i - 1], b = points[i]
+            guard b.time > from, b.time <= to else { continue }
+            let gap = b.time.timeIntervalSince(a.time)
+            let d = CLLocation(latitude: a.lat, longitude: a.lon).distance(from: CLLocation(latitude: b.lat, longitude: b.lon))
+            guard gap > 0, d / gap < 120 else { continue }
+            sum += d / 1000 * Self.speedFactor((a.speed + b.speed) / 2)
+        }
+        return sum
+    }
+
+    private func usedKm(_ id: UUID, from: Date, to: Date, live: [TrackPoint]) -> Double {
+        rides.filter { $0.bikeID == id && $0.end > from && $0.start < to }
+            .reduce(0) { $0 + weightedKm($1.points, from: from, to: to) } + weightedKm(live, from: from, to: to)
     }
 
     /// Velocità media in movimento sui tuoi giri con questa moto (nil se meno di 3 giri utili).

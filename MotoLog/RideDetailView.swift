@@ -189,7 +189,7 @@ struct RideDetailView: View {
                 Marker("Arrivo", systemImage: "flag.checkered", coordinate: last.coordinate).tint(.red)
             }
             if scrub > 0, let p = scrubPoint(ride) {
-                Marker("", systemImage: "scooter", coordinate: p.coordinate).tint(.orange)
+                Marker("", systemImage: Theme.bikeSymbol, coordinate: p.coordinate).tint(.orange)
             }
         }
         .mapStyle(.standard(elevation: .realistic))

@@ -79,6 +79,7 @@ struct FuelEntry: Codable, Identifiable {
     var liters: Double
     var cost: Double
     var odometerKm: Double
+    var isFull: Bool?      // nil = pieno (dati vecchi)
 }
 
 struct Deadline: Codable, Identifiable {

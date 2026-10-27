@@ -38,5 +38,6 @@ targets:
           - audio
         NSLocationWhenInUseUsageDescription: MotoLog usa la posizione per registrare il percorso, la velocità e la distanza dei tuoi giri.
         NSLocationAlwaysAndWhenInUseUsageDescription: MotoLog continua a registrare il giro anche quando lo schermo è bloccato o l'app è in background.
+        NSCameraUsageDescription: MotoLog usa la fotocamera per leggere litri e importo dal display del distributore.
         NSMotionUsageDescription: MotoLog usa i sensori di movimento per misurare l'angolo di piega e le forze G.
         ITSAppUsesNonExemptEncryption: false

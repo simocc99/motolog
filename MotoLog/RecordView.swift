@@ -11,6 +11,7 @@ struct RecordView: View {
     @State private var camera: MapCameraPosition = .userLocation(followsHeading: true, fallback: .automatic)
     @State private var showStopDialog = false
     @State private var summary: IdentifiedID?
+    @State private var showFuel = false
 
     var body: some View {
         ZStack {
@@ -53,6 +54,10 @@ struct RecordView: View {
             Button("Elimina", role: .destructive) { store.saveDraft(nil) }
         } message: {
             Text("L'app si è chiusa durante un giro. Vuoi recuperarlo?")
+        }
+        .onChange(of: tracker.fuelStation) { _, s in if s != nil { showFuel = true } }
+        .sheet(isPresented: $showFuel, onDismiss: { tracker.fuelStation = nil }) {
+            FuelStopSheet(bike: activeBike, station: tracker.fuelStation)
         }
         .sheet(item: $summary) { item in
             NavigationStack { RideDetailView(rideID: item.id, isSheet: true) }
@@ -117,7 +122,7 @@ struct RecordView: View {
                     ForEach(store.bikes) { b in Button(b.name) { bikeID = b.id } }
                     Button("Nessuna moto") { bikeID = nil }
                 } label: {
-                    Chip(text: store.bike(bikeID)?.name ?? "Nessuna moto", icon: "scooter", tint: Theme.accent)
+                    Chip(text: store.bike(bikeID)?.name ?? "Nessuna moto", icon: Theme.bikeSymbol, tint: Theme.accent)
                 }
             }
             fuelChip
@@ -125,14 +130,16 @@ struct RecordView: View {
         }
     }
 
+    private var activeBike: Bike? { store.bike(tracker.state == .idle ? bikeID : tracker.bikeID) }
+
     @ViewBuilder
     private var fuelChip: some View {
-        if let bike = store.bike(bikeID),
-           let left = store.remainingRange(for: bike, extraKm: tracker.distance / 1000),
-           let full = store.autonomy(for: bike), tracker.state != .idle || left < full * 0.2 {
-            Chip(text: left <= 0 ? "RISERVA" : "\(Int(left)) km",
-                 icon: "fuelpump.fill",
-                 tint: left < full * 0.15 ? .orange : Theme.dim)
+        if let bike = activeBike, let st = store.fuelState(for: bike, live: tracker.bikeID == bike.id ? tracker.points : []),
+           tracker.state != .idle || st.low {
+            Button { showFuel = true } label: {
+                Chip(text: st.range <= 0 ? "RISERVA" : String(format: "%.1f L · %d km", st.liters, Int(st.range)),
+                     icon: "fuelpump.fill", tint: st.low ? .orange : Theme.dim)
+            }
         }
     }
 

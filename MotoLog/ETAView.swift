@@ -68,7 +68,7 @@ struct ETAView: View {
             HStack(spacing: 8) {
                 ForEach(store.bikes) { b in
                     Button { bikeID = b.id } label: {
-                        Chip(text: b.name, icon: "scooter", tint: b.id == bikeID ? Theme.accent : Theme.dim)
+                        Chip(text: b.name, icon: Theme.bikeSymbol, tint: b.id == bikeID ? Theme.accent : Theme.dim)
                     }
                 }
             }

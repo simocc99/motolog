@@ -92,7 +92,7 @@ final class DataStore: ObservableObject {
 
     /// Consumo medio in L/100km tra i pieni registrati (nil se dati insufficienti).
     func consumption(for bike: Bike) -> Double? {
-        let entries = fuel.filter { $0.bikeID == bike.id }.sorted { $0.odometerKm < $1.odometerKm }
+        let entries = fuel.filter { $0.bikeID == bike.id && $0.isFull != false }.sorted { $0.odometerKm < $1.odometerKm }
         guard entries.count >= 2, let first = entries.first, let last = entries.last else { return nil }
         let km = last.odometerKm - first.odometerKm
         guard km > 0 else { return nil }

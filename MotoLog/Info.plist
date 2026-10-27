@@ -22,6 +22,8 @@
 	<string>1</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>MotoLog usa la fotocamera per leggere litri e importo dal display del distributore.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>MotoLog continua a registrare il giro anche quando lo schermo è bloccato o l'app è in background.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

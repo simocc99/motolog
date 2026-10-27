@@ -3,6 +3,8 @@ import CoreLocation
 import CoreMotion
 import AVFoundation
 import UIKit
+import MapKit
+import UserNotifications
 
 enum RideState { case idle, recording, paused }
 
@@ -25,6 +27,8 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var authorization: CLAuthorizationStatus = .notDetermined
     @Published var bikeID: UUID?
     @Published var accuracy: Double = -1
+    /// Nome del distributore vicino quando ti fermi: la schermata chiede i litri.
+    @Published var fuelStation: String?
 
     /// Chiamato periodicamente con la bozza del giro, per poterlo recuperare se l'app viene chiusa.
     var draftHandler: ((Ride?) -> Void)?
@@ -50,6 +54,9 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     private var impactTime: Date?
     private var speedBeforeImpact = 0.0
     private var tick = 0
+    private var stopSince: Date?
+    private var lastStationCheck: CLLocation?
+    private var checkingStation = false
 
     override init() {
         super.init()
@@ -83,6 +90,7 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     func start(bikeID: UUID?) {
         reset()
+        Notifier.requestAuthorization()
         self.bikeID = bikeID
         startDate = Date()
         activeSince = Date()
@@ -137,6 +145,7 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         lastLocation = nil; refAltitude = nil
         announcedKm = 0; impactTime = nil; fallAlert = false
         lastPointTime = .distantPast
+        stopSince = nil; lastStationCheck = nil; fuelStation = nil
     }
 
     private func makeRide() -> Ride {
@@ -220,6 +229,7 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
             speed = v
 
             guard state == .recording else { continue }
+            watchForStation(loc, speed: v)
 
             // Scarta i salti GPS impossibili (oltre ~430 km/h tra due fix ravvicinati).
             if let last = lastLocation {
@@ -248,6 +258,32 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
                                          lean: lean, g: gForce))
             }
             announceIfNeeded()
+        }
+    }
+
+    /// Fermo da più di 40 s: se nei 100 m c'è un distributore, propone di registrare il rifornimento.
+    private func watchForStation(_ loc: CLLocation, speed v: Double) {
+        guard fuelStation == nil, !checkingStation else { return }
+        guard v < 1 else { stopSince = nil; return }
+        guard let since = stopSince else { stopSince = loc.timestamp; return }
+        guard loc.timestamp.timeIntervalSince(since) > 40 else { return }
+        if let last = lastStationCheck, loc.distance(from: last) < 200 { return }
+        checkingStation = true
+        lastStationCheck = loc
+        let request = MKLocalPointsOfInterestRequest(center: loc.coordinate, radius: 100)
+        request.pointOfInterestFilter = MKPointOfInterestFilter(including: [.gasStation])
+        Task { @MainActor in
+            let items = try? await MKLocalSearch(request: request).start().mapItems
+            checkingStation = false
+            guard let name = items?.first.map({ $0.name ?? "un distributore" }) else { return }
+            fuelStation = name
+            if UIApplication.shared.applicationState != .active {
+                let content = UNMutableNotificationContent()
+                content.title = "Sei a un distributore?"
+                content.body = "Apri MotoLog e registra i litri che hai messo."
+                content.sound = .default
+                try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "fuelstop", content: content, trigger: nil))
+            }
         }
     }
 
