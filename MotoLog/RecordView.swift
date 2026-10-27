@@ -13,6 +13,10 @@ struct RecordView: View {
     @State private var summary: IdentifiedID?
     @State private var showFuel = false
     @State private var showPreflight = false
+    @AppStorage("saver") private var saverOn = false
+    @State private var lastTouch = Date()
+    @State private var dimmed = false
+    @State private var savedBrightness: CGFloat?
     @Environment(\.verticalSizeClass) private var vSize
     @AppStorage("preflight") private var preflight = false
 
@@ -30,7 +34,14 @@ struct RecordView: View {
         }
         .onChange(of: tracker.state) { _, new in
             UIApplication.shared.isIdleTimerDisabled = keepAwake && new == .recording
+            if new == .idle { wake() }
         }
+        .simultaneousGesture(TapGesture().onEnded { lastTouch = Date() })
+        .onChange(of: tracker.elapsed) { _, _ in
+            if tracker.state == .recording, tracker.saver, !dimmed, Date().timeIntervalSince(lastTouch) > 25 { dim() }
+        }
+        .overlay { if dimmed { dimOverlay } }
+        .onDisappear { wake() }
         .onAppear {
             if !tracker.isAuthorized { tracker.requestPermission() }
             if bikeID == nil { bikeID = store.bikes.first?.id }
@@ -114,6 +125,7 @@ struct RecordView: View {
                     Chip(text: "LIMITE DI VELOCITÀ SUPERATO", icon: "exclamationmark.triangle.fill", tint: .red)
                 }
                 sunsetBanner
+                batteryRow
                 SpeedGauge(speed: tracker.speed)
                     .frame(height: 270)
 
@@ -202,6 +214,50 @@ struct RecordView: View {
             Spacer()
         }
         .card(padding: 10)
+    }
+
+    // MARK: Risparmio batteria
+
+    /// Schermo nero con solo velocità e distanza: su OLED i pixel spenti non consumano.
+    private var dimOverlay: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 6) {
+                Text(Fmt.speedText(tracker.speed))
+                    .font(.system(size: 120, weight: .heavy, design: .rounded)).monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.55))
+                Text(Fmt.speedUnit.uppercased()).font(.footnote.weight(.bold)).tracking(4).foregroundStyle(.white.opacity(0.3))
+                Text("\(Fmt.distText(tracker.distance)) \(Fmt.distUnit)")
+                    .font(.title3.weight(.semibold)).monospacedDigit().foregroundStyle(.white.opacity(0.35))
+                    .padding(.top, 14)
+                Text("Tocca per riattivare").font(.caption).foregroundStyle(.white.opacity(0.2)).padding(.top, 30)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { wake() }
+    }
+
+    private func dim() {
+        savedBrightness = UIScreen.main.brightness
+        UIScreen.main.brightness = 0.1
+        dimmed = true
+    }
+
+    private func wake() {
+        if let b = savedBrightness { UIScreen.main.brightness = b; savedBrightness = nil }
+        dimmed = false
+        lastTouch = Date()
+    }
+
+    @ViewBuilder
+    private var batteryRow: some View {
+        if tracker.batteryLevel >= 0, tracker.state != .idle || tracker.batteryLevel < 0.2 {
+            let pct = Int(tracker.batteryLevel * 100)
+            let low = tracker.batteryLevel < 0.2
+            Chip(text: "Batteria \(pct)%" + (tracker.batteryHoursLeft.map { String(format: " · circa %.1f h", $0) } ?? "")
+                 + (low && !tracker.saver ? " · attiva Risparmio in Altro" : ""),
+                 icon: low ? "battery.25" : "battery.75", tint: low ? .orange : Theme.dim)
+        }
     }
 
     private var activeBike: Bike? { store.bike(tracker.state == .idle ? bikeID : tracker.bikeID) }

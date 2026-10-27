@@ -73,7 +73,7 @@ struct NavRunView: View {
 
     /// La telecamera è ricalcolata 30 volte al secondo, così il movimento non va a scatti.
     private var map: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
+        TimelineView(.animation(minimumInterval: tracker.saver ? 1.0 / 12 : 1.0 / 30)) { ctx in
             let frame = smoother.step(now: ctx.date)
             Map(position: .constant(cameraPosition(frame))) {
                 MapPolyline(engine.route.polyline).stroke(Theme.accent, lineWidth: 9)

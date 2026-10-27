@@ -58,6 +58,17 @@ struct RideAnalysisCard: View {
                     StatTile(title: "Piega più forte", value: String(format: "%.0f", a.sharpest), unit: "°", icon: "angle")
                 }
             }
+            if let s = ride.batteryStart, let e = ride.batteryEnd, s > e {
+                let used = (s - e) * 100
+                let hours = ride.elapsed / 3600
+                HStack {
+                    Image(systemName: "battery.50").foregroundStyle(Theme.accent)
+                    Text(String(format: "Batteria: %.0f%% usata", used))
+                    Spacer()
+                    if hours > 0.1 { Text(String(format: "%.1f%% all'ora", used / hours)).foregroundStyle(Theme.dim) }
+                }
+                .font(.subheadline)
+            }
             if a.stops.isEmpty {
                 Text("Nessuna sosta lunga (oltre 3 minuti).").font(.footnote).foregroundStyle(Theme.dim)
             } else {

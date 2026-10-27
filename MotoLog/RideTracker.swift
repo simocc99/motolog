@@ -60,6 +60,15 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     private var speedBeforeImpact = 0.0
     private var tick = 0
     private var stopSince: Date?
+    // Risparmio energetico
+    @Published var batteryLevel: Float = -1
+    private var batteryStart: Float = -1
+    private var batteryStartTime = Date()
+    private var appActive = true
+    private var lastMotionPublish = Date.distantPast
+    private var gInternal = 0.0
+    private var slowSince: Date?
+    private var parkedMode = false
     private var lastSpeedAlert = Date.distantPast
     private var lastStationCheck: CLLocation?
     private var checkingStation = false
@@ -67,11 +76,35 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     override init() {
         super.init()
         manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        // Da fermo basta una posizione approssimativa: il GPS preciso parte solo quando registri.
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
         manager.activityType = .automotiveNavigation
-        manager.distanceFilter = kCLDistanceFilterNone
+        manager.distanceFilter = 25
         manager.pausesLocationUpdatesAutomatically = false
         authorization = manager.authorizationStatus
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        batteryLevel = UIDevice.current.batteryLevel
+        NotificationCenter.default.addObserver(forName: UIDevice.batteryLevelDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.batteryLevel = UIDevice.current.batteryLevel
+        }
+    }
+
+    /// Modalità risparmio: attiva se l'hai scelta in Altro o se iOS è in "Risparmio energetico".
+    var saver: Bool { UserDefaults.standard.bool(forKey: "saver") || ProcessInfo.processInfo.isLowPowerModeEnabled }
+
+    /// Fuori dall'app, se non stai registrando, il GPS si spegne.
+    func setActive(_ active: Bool) {
+        appActive = active
+        guard state == .idle, isAuthorized else { return }
+        if active { manager.startUpdatingLocation() } else { manager.stopUpdatingLocation() }
+    }
+
+    /// Ore di batteria rimaste al ritmo di consumo di questo giro (dopo almeno 10 minuti).
+    var batteryHoursLeft: Double? {
+        let hours = Date().timeIntervalSince(batteryStartTime) / 3600
+        let drop = Double(batteryStart - batteryLevel)
+        guard state != .idle, batteryStart >= 0, batteryLevel >= 0, hours > 1.0 / 6, drop >= 0.02 else { return nil }
+        return Double(batteryLevel) / (drop / hours)
     }
 
     // MARK: Permessi
@@ -98,6 +131,8 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         reset()
         Notifier.requestAuthorization()
         self.bikeID = bikeID
+        batteryStart = UIDevice.current.batteryLevel
+        batteryStartTime = Date()
         startDate = Date()
         activeSince = Date()
         state = .recording
@@ -153,6 +188,7 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         lastPointTime = .distantPast
         stopSince = nil; lastStationCheck = nil; fuelStation = nil
         overLimit = false
+        slowSince = nil; parkedMode = false
     }
 
     private func makeRide() -> Ride {
@@ -167,6 +203,8 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         r.maxLeanRight = maxRight
         r.maxG = maxG
         r.points = points
+        if batteryStart >= 0 { r.batteryStart = Double(batteryStart) }
+        if UIDevice.current.batteryLevel >= 0 { r.batteryEnd = Double(UIDevice.current.batteryLevel) }
         return r
     }
 
@@ -175,10 +213,14 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     private func beginSensors() {
         manager.allowsBackgroundLocationUpdates = true
         manager.showsBackgroundLocationIndicator = true
+        manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        manager.distanceFilter = saver ? 5 : kCLDistanceFilterNone
         manager.startUpdatingLocation()
 
         if motion.isDeviceMotionAvailable {
-            motion.deviceMotionUpdateInterval = 0.1
+            // 10 Hz solo se serve il rilevamento caduta; altrimenti 5 Hz (4 Hz in risparmio): la piega si legge uguale.
+            let fall = UserDefaults.standard.bool(forKey: "fallDetection")
+            motion.deviceMotionUpdateInterval = fall ? 0.1 : (saver ? 0.25 : 0.2)
             motion.startDeviceMotionUpdates(to: .main) { [weak self] dm, _ in
                 guard let self, let dm else { return }
                 self.handleMotion(dm)
@@ -191,7 +233,9 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         motion.stopDeviceMotionUpdates()
         manager.allowsBackgroundLocationUpdates = false
         manager.showsBackgroundLocationIndicator = false
-        if !isAuthorized { manager.stopUpdatingLocation() }
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        manager.distanceFilter = 25
+        if !isAuthorized || !appActive { manager.stopUpdatingLocation() }
     }
 
     private func handleMotion(_ dm: CMDeviceMotion) {
@@ -199,17 +243,25 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         rawLean = atan2(dm.gravity.x, -dm.gravity.y) * 180 / .pi
         let target = max(-75, min(75, rawLean - leanOffset))
         leanFiltered = leanFiltered * 0.8 + target * 0.2
-        lean = leanFiltered
 
         let a = dm.userAcceleration
         let g = (a.x * a.x + a.y * a.y + a.z * a.z).squareRoot()
-        gForce = gForce * 0.7 + g * 0.3
+        gInternal = gInternal * 0.7 + g * 0.3
+
+        // Il display si aggiorna al massimo 4 volte al secondo e mai a schermo spento.
+        let now = Date()
+        if appActive, now.timeIntervalSince(lastMotionPublish) > 0.25 {
+            lastMotionPublish = now
+            lean = leanFiltered
+            gForce = gInternal
+        }
 
         guard state == .recording else { return }
         if speed > 3 {
-            if lean < 0 { maxLeft = max(maxLeft, -lean) } else { maxRight = max(maxRight, lean) }
+            if leanFiltered < 0, -leanFiltered > maxLeft + 0.5 { maxLeft = -leanFiltered }
+            else if leanFiltered > 0, leanFiltered > maxRight + 0.5 { maxRight = leanFiltered }
         }
-        maxG = max(maxG, min(gForce, 6))
+        if min(gInternal, 6) > maxG + 0.05 { maxG = min(gInternal, 6) }
 
         if g > 4, impactTime == nil, UserDefaults.standard.bool(forKey: "fallDetection") {
             impactTime = Date()
@@ -237,6 +289,7 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
             speed = v
 
             guard state == .recording else { continue }
+            adaptAccuracy(v)
             watchForStation(loc, speed: v)
             checkSpeedLimit(v)
 
@@ -264,9 +317,28 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
                 lastPointTime = now
                 points.append(TrackPoint(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude,
                                          alt: loc.altitude, speed: v, time: loc.timestamp,
-                                         lean: lean, g: gForce))
+                                         lean: leanFiltered, g: gInternal))
             }
             announceIfNeeded()
+        }
+    }
+
+    /// Fermo da più di 90 secondi (semaforo lungo, sosta): il GPS scende a precisione ridotta fino alla ripartenza.
+    private func adaptAccuracy(_ v: Double) {
+        if v < 1 {
+            if slowSince == nil { slowSince = Date() }
+            if !parkedMode, let s = slowSince, Date().timeIntervalSince(s) > 90 {
+                parkedMode = true
+                manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+                manager.distanceFilter = 15
+            }
+        } else {
+            slowSince = nil
+            if parkedMode {
+                parkedMode = false
+                manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+                manager.distanceFilter = saver ? 5 : kCLDistanceFilterNone
+            }
         }
     }
 
@@ -328,6 +400,7 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.onTick()
         }
+        timer?.tolerance = 0.4   // permette a iOS di raggruppare i risvegli
     }
 
     private func onTick() {
@@ -335,7 +408,7 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
             elapsed = accumulated + Date().timeIntervalSince(since)
         }
         tick += 1
-        if tick % 30 == 0, state != .idle, points.count > 1 {
+        if tick % 60 == 0, state != .idle, points.count > 1 {
             draftHandler?(makeRide())
         }
         if let t = impactTime, Date().timeIntervalSince(t) > 4 {

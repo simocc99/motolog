@@ -32,6 +32,8 @@ struct Ride: Codable, Identifiable {
     var rating: Int = 0
     var notes: String = ""
     var points: [TrackPoint] = []
+    var batteryStart: Double?     // 0...1, nil se sconosciuta
+    var batteryEnd: Double?
 
     var avgSpeed: Double { movingTime > 0 ? distance / movingTime : 0 }
     var stoppedTime: TimeInterval { max(0, elapsed - movingTime) }

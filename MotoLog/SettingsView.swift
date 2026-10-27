@@ -13,6 +13,7 @@ struct SettingsView: View {
     @AppStorage("speedAlert") private var speedAlert = false
     @AppStorage("speedLimitKmh") private var speedLimit = 130.0
     @AppStorage("preflight") private var preflight = false
+    @AppStorage("saver") private var saver = false
 
     @State private var exportURL: URL?
     @State private var confirmReset = false
@@ -52,6 +53,14 @@ struct SettingsView: View {
                     Toggle("Annunci vocali ogni chilometro", isOn: $voice)
                     Toggle("Rilevamento caduta", isOn: $fallDetection)
                 }
+                Section {
+                    Toggle("Risparmio batteria in marcia", isOn: $saver)
+                } header: {
+                    Text("Batteria")
+                } footer: {
+                    Text("Dopo 25 secondi senza toccare lo schermo diventa nero con solo velocità e distanza (tocca per riattivare) e la luminosità scende. Sensori meno frequenti e GPS a precisione ridotta dopo 90 secondi da fermo. Si attiva da solo se l'iPhone è in Risparmio energetico.")
+                }
+
                 Section {
                     Toggle("Avviso di velocità", isOn: $speedAlert)
                     if speedAlert {

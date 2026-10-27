@@ -4,12 +4,13 @@ import SwiftUI
 struct MotoLogApp: App {
     @StateObject private var store = DataStore()
     @StateObject private var tracker = RideTracker()
+    @Environment(\.scenePhase) private var phase
 
     init() {
         UserDefaults.standard.register(defaults: [
             "keepAwake": true, "voice": false, "fallDetection": false, "units": "metric",
             "theme": "dark", "monthlyGoalKm": 300.0,
-            "speedAlert": false, "speedLimitKmh": 130.0, "preflight": false
+            "speedAlert": false, "saver": false, "speedLimitKmh": 130.0, "preflight": false
         ])
         let tab = UITabBarAppearance()
         tab.configureWithOpaqueBackground()
@@ -34,6 +35,7 @@ struct MotoLogApp: App {
                 .onAppear {
                     tracker.draftHandler = { [store] ride in store.saveDraft(ride) }
                 }
+                .onChange(of: phase) { _, p in tracker.setActive(p == .active) }
         }
     }
 }
