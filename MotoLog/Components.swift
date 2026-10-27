@@ -115,15 +115,36 @@ struct SpeedGauge: View {
     let speed: Double   // m/s
 
     var body: some View {
-        let top = Fmt.imperial ? 125.0 : 200.0
+        // Fondo scala: 300 km/h (185 mph), così le moto sportive ci stanno.
+        let top = Fmt.imperial ? 185.0 : 300.0
         let p = min(max(Fmt.speed(speed) / top, 0), 1)
         ZStack {
+            GeometryReader { geo in
+                let r = min(geo.size.width, geo.size.height) / 2
+                let step = Fmt.imperial ? 25.0 : 50.0
+                let labelEvery = Fmt.imperial ? 50.0 : 100.0
+                ForEach(Array(stride(from: 0.0, through: top, by: step)), id: \.self) { v in
+                    let a = Angle.degrees(135 + 270 * v / top).radians
+                    let big = v.truncatingRemainder(dividingBy: labelEvery) == 0
+                    Path { path in
+                        path.move(to: CGPoint(x: geo.size.width / 2 + (r - 20) * cos(a), y: geo.size.height / 2 + (r - 20) * sin(a)))
+                        path.addLine(to: CGPoint(x: geo.size.width / 2 + (r - (big ? 34 : 29)) * cos(a), y: geo.size.height / 2 + (r - (big ? 34 : 29)) * sin(a)))
+                    }
+                    .stroke(Theme.dim.opacity(big ? 0.9 : 0.5), lineWidth: big ? 3 : 2)
+                    if big {
+                        Text("\(Int(v))").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(Theme.dim)
+                            .position(x: geo.size.width / 2 + (r - 50) * cos(a), y: geo.size.height / 2 + (r - 50) * sin(a))
+                    }
+                }
+            }
             ZStack {
                 Circle().trim(from: 0, to: 0.75)
                     .stroke(Theme.fill, style: StrokeStyle(lineWidth: 20, lineCap: .round))
                 Circle().trim(from: 0, to: 0.75)
-                    .stroke(AngularGradient(colors: [.green, .yellow, .orange, .red],
-                                            center: .center, startAngle: .degrees(0), endAngle: .degrees(270)),
+                    .stroke(AngularGradient(stops: [.init(color: .green, location: 0), .init(color: .green, location: 0.18),
+                                                    .init(color: .yellow, location: 0.42), .init(color: .orange, location: 0.62),
+                                                    .init(color: .red, location: 0.75), .init(color: .green, location: 1)],
+                                            center: .center, startAngle: .degrees(0), endAngle: .degrees(360)),
                             style: StrokeStyle(lineWidth: 20, lineCap: .round))
                     .mask(Circle().trim(from: 0, to: 0.75 * p)
                         .stroke(style: StrokeStyle(lineWidth: 24, lineCap: .round)))
@@ -133,7 +154,7 @@ struct SpeedGauge: View {
 
             VStack(spacing: -2) {
                 Text(Fmt.speedText(speed))
-                    .font(.system(size: 96, weight: .heavy, design: .rounded))
+                    .font(.system(size: 80, weight: .heavy, design: .rounded))
                     .monospacedDigit()
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
@@ -142,7 +163,7 @@ struct SpeedGauge: View {
                     .tracking(3)
                     .foregroundStyle(Theme.dim)
             }
-            .offset(y: -6)
+            .offset(y: 4)
         }
         .padding(14)
     }

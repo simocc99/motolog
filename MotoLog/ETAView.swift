@@ -23,6 +23,13 @@ final class PlaceSearch: NSObject, ObservableObject, MKLocalSearchCompleterDeleg
     func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {}
 }
 
+struct NavLaunch: Identifiable {
+    let id = UUID()
+    let route: MKRoute
+    let dest: MKMapItem
+    let simulate: Bool
+}
+
 /// Tempo di arrivo: percorso di Apple Maps corretto con il ritmo reale che tieni con la moto scelta.
 struct ETAView: View {
     @EnvironmentObject var store: DataStore
@@ -35,6 +42,9 @@ struct ETAView: View {
     @State private var route: MKRoute?
     @State private var loading = false
     @State private var failed = false
+    @State private var nav: NavLaunch?
+    @State private var preflight: NavLaunch?
+    @AppStorage("preflight") private var preflightOn = false
 
     private var bike: Bike? { store.bike(bikeID) }
 
@@ -57,6 +67,12 @@ struct ETAView: View {
         .background(Theme.background)
         .navigationTitle("Tempo di arrivo")
         .navigationBarTitleDisplayMode(.inline)
+        .fullScreenCover(item: $nav) { n in
+            NavRunView(route: n.route, destination: n.dest, bike: bike, simulate: n.simulate)
+        }
+        .sheet(item: $preflight) { n in
+            PreflightSheet(fuelNote: bike.flatMap { store.fuelState(for: $0) }.map { String(format: "Stimati %.1f L · %d km", $0.liters, Int($0.range)) }) { nav = n }
+        }
         .onAppear {
             if bikeID == nil { bikeID = store.bikes.first?.id }
             if !tracker.isAuthorized { tracker.requestPermission() }
@@ -174,14 +190,29 @@ struct ETAView: View {
         .card()
 
         Button {
-            dest.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
+            let launch = NavLaunch(route: route, dest: dest, simulate: false)
+            if preflightOn { preflight = launch } else { nav = launch }
         } label: {
-            Label("Avvia navigazione in Mappe", systemImage: "location.north.fill")
+            Label("Avvia navigatore (beta)", systemImage: "location.north.fill")
                 .font(.headline.weight(.heavy)).foregroundStyle(.black)
                 .frame(maxWidth: .infinity).padding(.vertical, 15)
                 .background(Theme.gradient, in: Capsule())
         }
-        Text("Apple Maps non conosce la tua moto: il tempo è la sua stima per le auto, corretta con la velocità che hai tenuto nei tuoi giri.")
+        HStack(spacing: 10) {
+            Button { nav = NavLaunch(route: route, dest: dest, simulate: true) } label: {
+                Label("Prova senza muoverti", systemImage: "play.circle")
+                    .font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 12)
+                    .background(Theme.fill, in: Capsule())
+            }
+            Button {
+                dest.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
+            } label: {
+                Label("Apri in Mappe", systemImage: "map")
+                    .font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 12)
+                    .background(Theme.fill, in: Capsule())
+            }
+        }
+        Text("Il navigatore usa i percorsi di Apple Maps con svolte, voce e ricalcolo. Non conosce curve o strade da moto: il tempo è la stima di Apple per le auto, corretta con la velocità dei tuoi giri.")
             .font(.caption2).foregroundStyle(Theme.dim).multilineTextAlignment(.center)
     }
 
