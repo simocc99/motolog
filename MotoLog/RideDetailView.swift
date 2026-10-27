@@ -13,6 +13,7 @@ struct RideDetailView: View {
     @State private var scrub = 0.0
     @State private var confirmDelete = false
     @State private var gpxURL: URL?
+    @State private var story: StoryItem?
 
     enum Metric: String, CaseIterable, Identifiable {
         case speed = "Velocità", altitude = "Quota", lean = "Piega", g = "G"
@@ -49,6 +50,9 @@ struct RideDetailView: View {
                 }
             }
         }
+        .sheet(item: $story) { item in
+            StoryPreviewSheet(image: item.image)
+        }
         .confirmationDialog("Eliminare questo giro?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Elimina", role: .destructive) {
                 store.rides.removeAll { $0.id == rideID }
@@ -84,6 +88,20 @@ struct RideDetailView: View {
                     }
                 }
                 .card()
+
+                Button {
+                    if let img = StoryCard.render(ride: ride, bikeName: store.bike(ride.bikeID)?.name) {
+                        story = StoryItem(image: img)
+                    }
+                } label: {
+                    Label("Crea storia per Instagram", systemImage: "sparkles")
+                        .font(.headline.weight(.heavy))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Theme.gradient, in: Capsule())
+                        .shadow(color: Theme.accent.opacity(0.35), radius: 14, y: 5)
+                }
 
                 stats(ride)
                 chartCard(ride)
