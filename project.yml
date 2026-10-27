@@ -1,0 +1,42 @@
+name: MotoLog
+options:
+  bundleIdPrefix: com.simococco
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+targets:
+  MotoLog:
+    type: application
+    platform: iOS
+    sources:
+      - path: MotoLog
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.simococco.motolog
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: MotoLog/Info.plist
+      properties:
+        CFBundleDisplayName: MotoLog
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIBackgroundModes:
+          - location
+          - audio
+        NSLocationWhenInUseUsageDescription: MotoLog usa la posizione per registrare il percorso, la velocità e la distanza dei tuoi giri.
+        NSLocationAlwaysAndWhenInUseUsageDescription: MotoLog continua a registrare il giro anche quando lo schermo è bloccato o l'app è in background.
+        NSMotionUsageDescription: MotoLog usa i sensori di movimento per misurare l'angolo di piega e le forze G.
+        ITSAppUsesNonExemptEncryption: false
