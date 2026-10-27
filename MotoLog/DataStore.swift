@@ -87,6 +87,7 @@ final class DataStore: ObservableObject {
         deadlines.filter { $0.bikeID == bike.id }.forEach { Notifier.cancel($0) }
         deadlines.removeAll { $0.bikeID == bike.id }
         bikes.removeAll { $0.id == bike.id }
+        BikePhotos.delete(bike.id)
     }
 
     /// Consumo medio in L/100km tra i pieni registrati (nil se dati insufficienti).

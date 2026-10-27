@@ -120,7 +120,19 @@ struct RecordView: View {
                     Chip(text: store.bike(bikeID)?.name ?? "Nessuna moto", icon: "scooter", tint: Theme.accent)
                 }
             }
+            fuelChip
             gpsChip
+        }
+    }
+
+    @ViewBuilder
+    private var fuelChip: some View {
+        if let bike = store.bike(bikeID),
+           let left = store.remainingRange(for: bike, extraKm: tracker.distance / 1000),
+           let full = store.autonomy(for: bike), tracker.state != .idle || left < full * 0.2 {
+            Chip(text: left <= 0 ? "RISERVA" : "\(Int(left)) km",
+                 icon: "fuelpump.fill",
+                 tint: left < full * 0.15 ? .orange : Theme.dim)
         }
     }
 

@@ -58,6 +58,10 @@ struct Bike: Codable, Identifiable {
     var brand: String = ""
     var year: Int = 0
     var initialKm: Double = 0
+    // Opzionali: i dati salvati prima di questi campi restano leggibili.
+    var tankLiters: Double?
+    var hasPhoto: Bool?
+    var photoRev: Int?
 }
 
 struct MaintenanceItem: Codable, Identifiable {

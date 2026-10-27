@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct GarageView: View {
     @EnvironmentObject var store: DataStore
@@ -24,6 +25,8 @@ struct GarageView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: 12) {
+                            NavigationLink { ETAView() } label: { etaCard }
+                                .buttonStyle(.plain)
                             ForEach(store.bikes) { bike in
                                 NavigationLink {
                                     BikeDetailView(bikeID: bike.id)
@@ -47,12 +50,25 @@ struct GarageView: View {
 }
 
 extension GarageView {
+    fileprivate var etaCard: some View {
+        HStack(spacing: 14) {
+            IconBadge(icon: "flag.checkered", size: 44)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Tempo di arrivo").font(.headline)
+                Text("Percorso Apple Maps corretto col tuo ritmo").font(.caption).foregroundStyle(Theme.dim)
+            }
+            Spacer()
+            Image(systemName: "chevron.right").foregroundStyle(Theme.dim)
+        }
+        .card()
+    }
+
     fileprivate func bikeCard(_ bike: Bike) -> some View {
         let sub = [bike.brand, bike.year > 0 ? String(bike.year) : ""].filter { !$0.isEmpty }.joined(separator: " · ")
         let due = store.maintenance.filter { $0.bikeID == bike.id }
             .filter { store.odometer(of: bike) - $0.lastDoneKm >= $0.intervalKm }.count
         return HStack(spacing: 14) {
-            IconBadge(icon: "scooter", size: 52)
+            BikeThumb(bike: bike, size: 52)
             VStack(alignment: .leading, spacing: 4) {
                 Text(bike.name).font(.title3.weight(.bold))
                 if !sub.isEmpty { Text(sub).font(.caption).foregroundStyle(Theme.dim) }
@@ -115,7 +131,61 @@ struct BikeDetailView: View {
         var id: String { rawValue }
     }
 
+    @State private var pickedPhoto: PhotosPickerItem?
+    @State private var processing = false
+    @State private var cutoutFailed = false
+
     private var bike: Bike? { store.bikes.first { $0.id == bikeID } }
+
+    private func tankBinding(_ bike: Bike) -> Binding<Double> {
+        Binding(get: { bike.tankLiters ?? 0 },
+                set: { v in if let i = store.bikes.firstIndex(where: { $0.id == bike.id }) { store.bikes[i].tankLiters = v } })
+    }
+
+    private func photoHeader(_ bike: Bike) -> some View {
+        VStack(spacing: 10) {
+            if let img = BikePhotos.image(for: bike) {
+                Image(uiImage: img).resizable().scaledToFit().frame(maxHeight: 150)
+                    .shadow(color: Theme.accent.opacity(0.25), radius: 16)
+            } else {
+                IconBadge(icon: "scooter", size: 64)
+            }
+            if processing { ProgressView("Ritaglio la moto…") }
+            HStack {
+                PhotosPicker(selection: $pickedPhoto, matching: .images) {
+                    Label(bike.hasPhoto == true ? "Cambia foto" : "Aggiungi foto", systemImage: "photo")
+                }
+                if bike.hasPhoto == true {
+                    Spacer()
+                    Button("Rimuovi", role: .destructive) { store.deletePhoto(of: bike) }
+                }
+            }
+            .buttonStyle(.borderless)
+            if cutoutFailed {
+                Text("Non sono riuscito a isolare la moto, ho tenuto la foto originale. Prova con una foto laterale su sfondo semplice.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .onChange(of: pickedPhoto) { _, item in
+            guard let item else { return }
+            Task { await importPhoto(item, for: bike) }
+        }
+    }
+
+    @MainActor
+    private func importPhoto(_ item: PhotosPickerItem, for bike: Bike) async {
+        processing = true; cutoutFailed = false
+        defer { processing = false; pickedPhoto = nil }
+        guard let data = try? await item.loadTransferable(type: Data.self), let ui = UIImage(data: data) else { return }
+        let cut = await Cutout.subject(of: ui)
+        cutoutFailed = cut == nil
+        BikePhotos.save(cut ?? Cutout.normalized(ui), for: bike.id)
+        if let i = store.bikes.firstIndex(where: { $0.id == bike.id }) {
+            store.bikes[i].hasPhoto = true
+            store.bikes[i].photoRev = (store.bikes[i].photoRev ?? 0) + 1
+        }
+    }
 
     var body: some View {
         Group {
@@ -136,6 +206,23 @@ struct BikeDetailView: View {
         let rides = store.rides.filter { $0.bikeID == bike.id }
 
         return List {
+            Section {
+                photoHeader(bike)
+                Stepper(value: tankBinding(bike), in: 0...40, step: 0.5) {
+                    LabeledContent("Serbatoio", value: (bike.tankLiters ?? 0) > 0 ? String(format: "%.1f L", bike.tankLiters ?? 0) : "non impostato")
+                }
+                if let full = store.autonomy(for: bike) {
+                    LabeledContent("Autonomia con un pieno", value: "\(Int(full)) km")
+                    if let left = store.remainingRange(for: bike) {
+                        LabeledContent("Ancora per circa", value: "\(Int(max(left, 0))) km")
+                            .foregroundStyle(left < full * 0.15 ? .orange : .primary)
+                    }
+                } else {
+                    Text("Imposta il serbatoio e registra almeno due pieni: l'app calcola consumo e autonomia da sola.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
             Section {
                 LabeledContent("Contachilometri", value: "\(Fmt.distText(odo * 1000)) \(Fmt.distUnit)")
                 LabeledContent("Giri registrati", value: "\(rides.count)")
