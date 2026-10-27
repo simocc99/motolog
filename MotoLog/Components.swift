@@ -69,6 +69,7 @@ struct Chip: View {
         HStack(spacing: 4) {
             if let icon { Image(systemName: icon).font(.system(size: 10, weight: .bold)) }
             Text(text).font(.system(size: 12, weight: .semibold, design: .rounded)).monospacedDigit()
+                .lineLimit(1).fixedSize()
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 5)

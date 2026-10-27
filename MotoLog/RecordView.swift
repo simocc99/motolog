@@ -112,7 +112,7 @@ struct RecordView: View {
     private var header: some View {
         HStack(spacing: 8) {
             switch tracker.state {
-            case .recording: Chip(text: "IN REGISTRAZIONE", icon: "circle.fill", tint: .red)
+            case .recording: Chip(text: "REC", icon: "circle.fill", tint: .red)
             case .paused: Chip(text: "IN PAUSA", icon: "pause.fill", tint: .yellow)
             case .idle: Chip(text: "PRONTO", icon: "checkmark.circle.fill", tint: .green)
             }
@@ -137,7 +137,7 @@ struct RecordView: View {
         if let bike = activeBike, let st = store.fuelState(for: bike, live: tracker.bikeID == bike.id ? tracker.points : []),
            tracker.state != .idle || st.low {
             Button { showFuel = true } label: {
-                Chip(text: st.range <= 0 ? "RISERVA" : String(format: "%.1f L · %d km", st.liters, Int(st.range)),
+                Chip(text: st.range <= 0 ? "RISERVA" : String(format: "%.0f L · %d km", st.liters, Int(st.range)),
                      icon: "fuelpump.fill", tint: st.low ? .orange : Theme.dim)
             }
         }
