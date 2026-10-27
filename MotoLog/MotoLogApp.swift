@@ -7,11 +7,14 @@ struct MotoLogApp: App {
 
     init() {
         UserDefaults.standard.register(defaults: [
-            "keepAwake": true, "voice": false, "fallDetection": false, "units": "metric"
+            "keepAwake": true, "voice": false, "fallDetection": false, "units": "metric",
+            "theme": "dark", "monthlyGoalKm": 300.0
         ])
         let tab = UITabBarAppearance()
         tab.configureWithOpaqueBackground()
-        tab.backgroundColor = UIColor(red: 0.05, green: 0.05, blue: 0.07, alpha: 1)
+        tab.backgroundColor = UIColor { $0.userInterfaceStyle == .dark
+            ? UIColor(red: 0.05, green: 0.05, blue: 0.07, alpha: 1)
+            : UIColor(red: 0.98, green: 0.98, blue: 0.99, alpha: 1) }
         UITabBar.appearance().standardAppearance = tab
         UITabBar.appearance().scrollEdgeAppearance = tab
         let nav = UINavigationBarAppearance()
@@ -36,6 +39,15 @@ struct MotoLogApp: App {
 
 struct RootView: View {
     @AppStorage("units") private var units = "metric"
+    @AppStorage("theme") private var theme = "dark"
+
+    private var scheme: ColorScheme? {
+        switch theme {
+        case "light": return .light
+        case "system": return nil
+        default: return .dark
+        }
+    }
 
     var body: some View {
         TabView {
@@ -50,7 +62,7 @@ struct RootView: View {
             SettingsView()
                 .tabItem { Label("Altro", systemImage: "gearshape") }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(scheme)
         .id(units)   // ricostruisce le viste quando cambiano le unità
     }
 }

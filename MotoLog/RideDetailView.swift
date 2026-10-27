@@ -14,6 +14,7 @@ struct RideDetailView: View {
     @State private var confirmDelete = false
     @State private var gpxURL: URL?
     @State private var story: StoryItem?
+    @State private var makingStory = false
 
     enum Metric: String, CaseIterable, Identifiable {
         case speed = "Velocità", altitude = "Quota", lean = "Piega", g = "G"
@@ -61,6 +62,17 @@ struct RideDetailView: View {
         }
     }
 
+    @MainActor
+    private func makeStory(_ ride: Ride) async {
+        guard !makingStory else { return }
+        makingStory = true
+        let backdrop = await StoryMap.backdrop(for: ride)
+        if let img = StoryCard.render(ride: ride, bikeName: store.bike(ride.bikeID)?.name, backdrop: backdrop) {
+            story = StoryItem(image: img)
+        }
+        makingStory = false
+    }
+
     private func content(_ ride: Ride) -> some View {
         ScrollView {
             VStack(spacing: 14) {
@@ -90,11 +102,10 @@ struct RideDetailView: View {
                 .card()
 
                 Button {
-                    if let img = StoryCard.render(ride: ride, bikeName: store.bike(ride.bikeID)?.name) {
-                        story = StoryItem(image: img)
-                    }
+                    Task { await makeStory(ride) }
                 } label: {
-                    Label("Crea storia per Instagram", systemImage: "sparkles")
+                    Label(makingStory ? "Preparo la mappa…" : "Crea storia per Instagram",
+                          systemImage: makingStory ? "hourglass" : "sparkles")
                         .font(.headline.weight(.heavy))
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)

@@ -4,6 +4,7 @@ import Charts
 struct StatsView: View {
     @EnvironmentObject var store: DataStore
     @State private var period = Period.month
+    @AppStorage("monthlyGoalKm") private var monthlyGoalKm = 300.0
 
     enum Period: String, CaseIterable, Identifiable {
         case week = "Settimana", month = "Mese", year = "Anno", all = "Sempre"
@@ -66,30 +67,79 @@ struct StatsView: View {
                     }
                     .pickerStyle(.segmented)
 
+                    levelCard
                     totals
                     chart
                     records
                     bikeBreakdown
-                    NavigationLink {
-                        AchievementsView()
-                    } label: {
-                        HStack {
-                            Image(systemName: "trophy.fill").foregroundStyle(.yellow)
-                            let a = Achievements.compute(store.rides)
-                            Text("Traguardi")
-                            Spacer()
-                            Text("\(a.filter(\.unlocked).count)/\(a.count)").foregroundStyle(.secondary)
-                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-                        }
-                        .card()
-                    }
-                    .buttonStyle(.plain)
+                    let a = Achievements.compute(store.rides)
+                    linkRow(icon: "medal.fill", tint: .yellow, title: "Classifica dei giri",
+                            detail: "i tuoi migliori") { RankingView() }
+                    linkRow(icon: "map.fill", tint: Theme.accent, title: "Mappa dei giri",
+                            detail: "tutti i percorsi") { AllRidesMapView() }
+                    linkRow(icon: "trophy.fill", tint: .yellow, title: "Traguardi",
+                            detail: "\(a.filter(\.unlocked).count)/\(a.count)") { AchievementsView() }
                 }
                 .padding()
             }
             .background(Theme.background)
             .navigationTitle("Statistiche")
         }
+    }
+
+    private func linkRow<D: View>(icon: String, tint: Color, title: String, detail: String,
+                                  @ViewBuilder destination: () -> D) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            HStack(spacing: 12) {
+                IconBadge(icon: icon, tint: tint, size: 34)
+                Text(title).font(.headline)
+                Spacer()
+                Text(detail).font(.subheadline).foregroundStyle(Theme.dim)
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(Theme.dim)
+            }
+            .card(padding: 14)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Livello da motociclista, serie settimanale e obiettivo mensile.
+    private var levelCard: some View {
+        let km = store.rides.reduce(0) { $0 + $1.distance } / 1000
+        let level = RiderLevel.level(forKm: km)
+        let cal = Calendar.current
+        let monthKm = store.rides.filter { cal.isDate($0.start, equalTo: Date(), toGranularity: .month) }
+            .reduce(0) { $0 + $1.distance } / 1000
+        let goal = max(monthlyGoalKm, 1)
+        let streak = RiderLevel.weekStreak(store.rides)
+        return HStack(spacing: 16) {
+            ZStack {
+                Circle().stroke(Theme.fill, lineWidth: 10)
+                Circle().trim(from: 0, to: min(monthKm / goal, 1))
+                    .stroke(Theme.gradient, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                VStack(spacing: -2) {
+                    Text("\(Int(monthKm))").font(.system(size: 24, weight: .heavy, design: .rounded)).monospacedDigit()
+                    Text("/ \(Int(goal)) km").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.dim)
+                }
+            }
+            .frame(width: 92, height: 92)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("LIVELLO").font(.system(size: 10, weight: .bold)).tracking(1.5).foregroundStyle(Theme.dim)
+                Text(level.name).font(.system(size: 24, weight: .heavy, design: .rounded))
+                ProgressView(value: level.progress).tint(Theme.accent)
+                if let next = level.next, let nextKm = level.nextKm {
+                    Text("\(next) a \(Int(nextKm)) km")
+                        .font(.caption).foregroundStyle(Theme.dim)
+                }
+                if streak > 0 {
+                    Chip(text: "\(streak) \(streak == 1 ? "settimana" : "settimane") di fila", icon: "flame.fill", tint: Theme.accent)
+                }
+            }
+        }
+        .card()
     }
 
     private var totals: some View {

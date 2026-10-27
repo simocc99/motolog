@@ -170,7 +170,7 @@ struct RecordView: View {
         VStack(spacing: 12) {
             HStack(spacing: 6) {
                 ForEach(0..<2, id: \.self) { i in
-                    Capsule().fill(i == page ? Theme.accent : Color.white.opacity(0.2))
+                    Capsule().fill(i == page ? Theme.accent : Color.gray.opacity(0.4))
                         .frame(width: i == page ? 18 : 6, height: 6)
                 }
             }
@@ -204,7 +204,7 @@ struct RecordView: View {
                             .foregroundStyle(.yellow)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 18)
-                            .background(Color.white.opacity(0.1), in: Capsule())
+                            .background(Theme.fill, in: Capsule())
                     }
                     Button { showStopDialog = true } label: {
                         Label("FINE", systemImage: "stop.fill")

@@ -1,10 +1,77 @@
 import SwiftUI
 import CoreLocation
+import MapKit
+import Network
+
+/// Mappa scaricata da Apple Maps con il percorso già proiettato sui pixel della storia (360×640).
+struct MapBackdrop {
+    let image: UIImage
+    let points: [CGPoint]
+}
+
+enum StoryMap {
+    static func online() async -> Bool {
+        await withCheckedContinuation { cont in
+            let monitor = NWPathMonitor()
+            var done = false
+            monitor.pathUpdateHandler = { path in
+                guard !done else { return }
+                done = true
+                monitor.cancel()
+                cont.resume(returning: path.status == .satisfied)
+            }
+            monitor.start(queue: DispatchQueue(label: "motolog.net"))
+        }
+    }
+
+    /// nil se offline o se la mappa non si riesce a scaricare: la storia usa allora lo sfondo scuro.
+    static func backdrop(for ride: Ride) async -> MapBackdrop? {
+        guard ride.points.count > 1, await online() else { return nil }
+        let coords = ride.points.map(\.coordinate)
+        let mp = coords.map { MKMapPoint($0) }
+        guard let minX = mp.map(\.x).min(), let maxX = mp.map(\.x).max(),
+              let minY = mp.map(\.y).min(), let maxY = mp.map(\.y).max() else { return nil }
+
+        // Il percorso deve occupare la fascia centrale dell'immagine (x 40…320, y 130…400).
+        let minExtent = 400 * MKMapPointsPerMeterAtLatitude(coords[0].latitude)
+        let s = max((maxX - minX) / 280, (maxY - minY) / 235, minExtent / 280)
+        let rect = MKMapRect(x: (minX + maxX) / 2 - 180 * s,
+                             y: (minY + maxY) / 2 - 250 * s,
+                             width: 360 * s, height: 640 * s)
+
+        let o = MKMapSnapshotter.Options()
+        o.mapRect = rect
+        o.size = CGSize(width: 360, height: 640)
+        o.scale = 3
+        o.traitCollection = UITraitCollection(userInterfaceStyle: .dark)
+        o.pointOfInterestFilter = .excludingAll
+        o.showsBuildings = false
+
+        guard let snap = try? await MKMapSnapshotter(options: o).start() else { return nil }
+        let step = max(1, coords.count / 200)
+        var idx = Array(stride(from: 0, to: coords.count, by: step))
+        if idx.last != coords.count - 1 { idx.append(coords.count - 1) }
+        return MapBackdrop(image: snap.image, points: idx.map { snap.point(for: coords[$0]) })
+    }
+}
+
+struct PointsShape: Shape {
+    let points: [CGPoint]
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        for (i, p) in points.enumerated() {
+            if i == 0 { path.move(to: p) } else { path.addLine(to: p) }
+        }
+        return path
+    }
+}
 
 /// Immagine 9:16 (1080×1920 a scala 3) pronta per le storie di Instagram.
 struct StoryCard: View {
     let ride: Ride
     let bikeName: String?
+    var backdrop: MapBackdrop? = nil
 
     private var route: [CLLocationCoordinate2D] {
         let step = max(1, ride.points.count / 160)
@@ -13,9 +80,7 @@ struct StoryCard: View {
 
     var body: some View {
         ZStack {
-            Theme.bg
-            RadialGradient(colors: [Theme.accent.opacity(0.38), .clear], center: .top, startRadius: 10, endRadius: 520)
-            RadialGradient(colors: [Theme.accent2.opacity(0.18), .clear], center: .bottom, startRadius: 10, endRadius: 420)
+            background
 
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
@@ -23,7 +88,7 @@ struct StoryCard: View {
                     Text("MOTOLOG").tracking(5)
                 }
                 .font(.system(size: 13, weight: .heavy))
-                .foregroundStyle(Theme.dim)
+                .foregroundStyle(backdrop == nil ? Theme.dim : .white.opacity(0.8))
                 .padding(.top, 34)
 
                 VStack(spacing: 4) {
@@ -32,20 +97,24 @@ struct StoryCard: View {
                         .lineLimit(1).minimumScaleFactor(0.6)
                     Text("\(ride.start.shortDate)" + (bikeName.map { " · \($0)" } ?? ""))
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Theme.dim)
+                        .foregroundStyle(.white.opacity(0.65))
                 }
                 .padding(.top, 22)
 
-                ZStack {
-                    RouteShape(pts: route)
-                        .stroke(Theme.accent.opacity(0.6), style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
-                        .blur(radius: 9)
-                    RouteShape(pts: route)
-                        .stroke(Theme.gradient, style: StrokeStyle(lineWidth: 4.5, lineCap: .round, lineJoin: .round))
+                if backdrop == nil {
+                    ZStack {
+                        RouteShape(pts: route)
+                            .stroke(Theme.accent.opacity(0.6), style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
+                            .blur(radius: 9)
+                        RouteShape(pts: route)
+                            .stroke(Theme.gradient, style: StrokeStyle(lineWidth: 4.5, lineCap: .round, lineJoin: .round))
+                    }
+                    .padding(28)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 270)
+                } else {
+                    Color.clear.frame(height: 270)   // il percorso è disegnato sopra la mappa
                 }
-                .padding(28)
-                .frame(maxWidth: .infinity)
-                .frame(height: 270)
 
                 VStack(spacing: -4) {
                     Text(Fmt.distText(ride.distance))
@@ -54,7 +123,7 @@ struct StoryCard: View {
                         .minimumScaleFactor(0.5).lineLimit(1)
                     Text(Fmt.distUnit.uppercased())
                         .font(.system(size: 14, weight: .bold)).tracking(4)
-                        .foregroundStyle(Theme.dim)
+                        .foregroundStyle(.white.opacity(0.65))
                 }
                 .padding(.top, 4)
 
@@ -76,23 +145,64 @@ struct StoryCard: View {
         .frame(width: 360, height: 640)
     }
 
+    @ViewBuilder
+    private var background: some View {
+        if let b = backdrop {
+            Image(uiImage: b.image)
+                .resizable()
+                .frame(width: 360, height: 640)
+            LinearGradient(stops: [
+                .init(color: .black.opacity(0.88), location: 0),
+                .init(color: .black.opacity(0.55), location: 0.26),
+                .init(color: .black.opacity(0.05), location: 0.38),
+                .init(color: .black.opacity(0.05), location: 0.52),
+                .init(color: .black.opacity(0.88), location: 0.64),
+                .init(color: .black.opacity(0.96), location: 0.80)
+            ], startPoint: .top, endPoint: .bottom)
+            ZStack {
+                PointsShape(points: b.points)
+                    .stroke(Theme.accent.opacity(0.7), style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round))
+                    .blur(radius: 8)
+                PointsShape(points: b.points)
+                    .stroke(Theme.gradient, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                if let first = b.points.first {
+                    Circle().fill(Color.green).frame(width: 12, height: 12)
+                        .overlay(Circle().stroke(.white, lineWidth: 2))
+                        .position(first)
+                }
+                if let last = b.points.last {
+                    Circle().fill(Color.red).frame(width: 12, height: 12)
+                        .overlay(Circle().stroke(.white, lineWidth: 2))
+                        .position(last)
+                }
+            }
+            .frame(width: 360, height: 640)
+        } else {
+            Theme.storyBg
+            RadialGradient(colors: [Theme.accent.opacity(0.38), .clear], center: .top, startRadius: 10, endRadius: 520)
+            RadialGradient(colors: [Theme.accent2.opacity(0.18), .clear], center: .bottom, startRadius: 10, endRadius: 420)
+        }
+    }
+
     private func cell(_ title: String, _ value: String, _ unit: String) -> some View {
         VStack(spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value).font(.system(size: 22, weight: .bold, design: .rounded)).monospacedDigit()
-                if !unit.isEmpty { Text(unit).font(.system(size: 10)).foregroundStyle(Theme.dim) }
+                if !unit.isEmpty { Text(unit).font(.system(size: 10)).foregroundStyle(.white.opacity(0.6)) }
             }
-            Text(title.uppercased()).font(.system(size: 9, weight: .semibold)).tracking(1).foregroundStyle(Theme.dim)
+            Text(title.uppercased()).font(.system(size: 9, weight: .semibold)).tracking(1).foregroundStyle(.white.opacity(0.6))
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
-        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(backdrop == nil ? Color.white.opacity(0.07) : Color.white.opacity(0.10),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     /// Genera l'immagine finale 1080×1920.
     @MainActor
-    static func render(ride: Ride, bikeName: String?) -> UIImage? {
-        let renderer = ImageRenderer(content: StoryCard(ride: ride, bikeName: bikeName))
+    static func render(ride: Ride, bikeName: String?, backdrop: MapBackdrop?) -> UIImage? {
+        let renderer = ImageRenderer(content: StoryCard(ride: ride, bikeName: bikeName, backdrop: backdrop)
+            .environment(\.colorScheme, .dark))
         renderer.scale = 3
         return renderer.uiImage
     }

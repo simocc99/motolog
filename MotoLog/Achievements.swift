@@ -9,6 +9,42 @@ struct Achievement: Identifiable {
     var unlocked: Bool { progress >= 1 }
 }
 
+/// Livello del motociclista in base ai chilometri totali.
+struct RiderLevel {
+    let name: String
+    let progress: Double      // 0...1 verso il livello successivo
+    let next: String?
+    let nextKm: Double?
+
+    static let tiers: [(name: String, km: Double)] = [
+        ("Novizio", 0), ("Apprendista", 100), ("Biker", 500),
+        ("Motociclista", 1500), ("Veterano", 5000), ("Leggenda", 15000)
+    ]
+
+    static func level(forKm km: Double) -> RiderLevel {
+        var idx = 0
+        for (i, t) in tiers.enumerated() where km >= t.km { idx = i }
+        guard idx + 1 < tiers.count else { return RiderLevel(name: tiers[idx].name, progress: 1, next: nil, nextKm: nil) }
+        let lo = tiers[idx].km, hi = tiers[idx + 1].km
+        return RiderLevel(name: tiers[idx].name, progress: (km - lo) / (hi - lo), next: tiers[idx + 1].name, nextKm: hi)
+    }
+
+    /// Settimane consecutive con almeno un giro (la settimana corrente conta se hai già guidato).
+    static func weekStreak(_ rides: [Ride]) -> Int {
+        let cal = Calendar.current
+        let weeks = Set(rides.compactMap { cal.dateInterval(of: .weekOfYear, for: $0.start)?.start })
+        guard var cursor = cal.dateInterval(of: .weekOfYear, for: Date())?.start else { return 0 }
+        if !weeks.contains(cursor), let prev = cal.date(byAdding: .weekOfYear, value: -1, to: cursor) { cursor = prev }
+        var n = 0
+        while weeks.contains(cursor) {
+            n += 1
+            guard let prev = cal.date(byAdding: .weekOfYear, value: -1, to: cursor) else { break }
+            cursor = prev
+        }
+        return n
+    }
+}
+
 enum Achievements {
     static func compute(_ rides: [Ride]) -> [Achievement] {
         let totalKm = rides.reduce(0) { $0 + $1.distance } / 1000

@@ -4,6 +4,8 @@ struct SettingsView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var tracker: RideTracker
 
+    @AppStorage("theme") private var theme = "dark"
+    @AppStorage("monthlyGoalKm") private var monthlyGoalKm = 300.0
     @AppStorage("units") private var units = "metric"
     @AppStorage("keepAwake") private var keepAwake = true
     @AppStorage("voice") private var voice = false
@@ -16,6 +18,25 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Aspetto") {
+                    Picker("Tema", selection: $theme) {
+                        Label("Scuro", systemImage: "moon.fill").tag("dark")
+                        Label("Chiaro", systemImage: "sun.max.fill").tag("light")
+                        Label("Automatico", systemImage: "circle.lefthalf.filled").tag("system")
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Section {
+                    Stepper(value: $monthlyGoalKm, in: 50...5000, step: 50) {
+                        LabeledContent("Obiettivo mensile", value: "\(Int(monthlyGoalKm)) km")
+                    }
+                } header: {
+                    Text("Obiettivi")
+                } footer: {
+                    Text("Lo vedi come anello nella scheda Statistiche.")
+                }
+
                 Section("Unità di misura") {
                     Picker("Sistema", selection: $units) {
                         Text("Metrico (km, km/h)").tag("metric")

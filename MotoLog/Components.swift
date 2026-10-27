@@ -2,12 +2,19 @@ import SwiftUI
 import CoreLocation
 
 enum Theme {
-    static let bg = Color(red: 0.035, green: 0.035, blue: 0.05)
-    static let card = Color(red: 0.085, green: 0.085, blue: 0.11)
-    static let stroke = Color.white.opacity(0.08)
+    private static func dyn(_ dark: UIColor, _ light: UIColor) -> Color {
+        Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? dark : light })
+    }
+
+    static let bg = dyn(UIColor(red: 0.035, green: 0.035, blue: 0.05, alpha: 1), UIColor(red: 0.945, green: 0.945, blue: 0.965, alpha: 1))
+    static let card = dyn(UIColor(red: 0.085, green: 0.085, blue: 0.11, alpha: 1), .white)
+    static let stroke = dyn(UIColor(white: 1, alpha: 0.08), UIColor(white: 0, alpha: 0.07))
+    static let dim = dyn(UIColor(white: 1, alpha: 0.55), UIColor(white: 0, alpha: 0.55))
+    static let fill = dyn(UIColor(white: 1, alpha: 0.08), UIColor(white: 0, alpha: 0.06))
     static let accent = Color(red: 1.0, green: 0.56, blue: 0.08)
     static let accent2 = Color(red: 1.0, green: 0.30, blue: 0.22)
-    static let dim = Color.white.opacity(0.55)
+    /// Sfondo fisso scuro per l'immagine della storia (non dipende dal tema).
+    static let storyBg = Color(red: 0.035, green: 0.035, blue: 0.05)
 
     static var gradient: LinearGradient {
         LinearGradient(colors: [accent, accent2], startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -112,7 +119,7 @@ struct SpeedGauge: View {
         ZStack {
             ZStack {
                 Circle().trim(from: 0, to: 0.75)
-                    .stroke(Color.white.opacity(0.08), style: StrokeStyle(lineWidth: 20, lineCap: .round))
+                    .stroke(Theme.fill, style: StrokeStyle(lineWidth: 20, lineCap: .round))
                 Circle().trim(from: 0, to: 0.75)
                     .stroke(AngularGradient(colors: [.green, .yellow, .orange, .red],
                                             center: .center, startAngle: .degrees(0), endAngle: .degrees(270)),
@@ -152,7 +159,7 @@ struct LeanArc: View {
         VStack(spacing: 8) {
             ZStack {
                 Circle().trim(from: 0.5, to: 1)
-                    .stroke(Color.white.opacity(0.1), style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                    .stroke(Theme.fill, style: StrokeStyle(lineWidth: 10, lineCap: .round))
                     .frame(width: 140, height: 140)
                     .position(x: 75, y: 75)
                 Circle()
@@ -212,7 +219,7 @@ struct RouteThumb: View {
         RouteShape(pts: pts)
             .stroke(Theme.gradient, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
             .padding(12)
-            .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(Theme.fill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -223,7 +230,7 @@ struct StarRating: View {
         HStack(spacing: 4) {
             ForEach(1...5, id: \.self) { i in
                 Image(systemName: i <= rating ? "star.fill" : "star")
-                    .foregroundStyle(i <= rating ? Color.yellow : Color.white.opacity(0.25))
+                    .foregroundStyle(i <= rating ? Color.yellow : Color.gray.opacity(0.4))
                     .onTapGesture { rating = (rating == i ? 0 : i) }
             }
         }
