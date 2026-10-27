@@ -230,9 +230,13 @@ struct GroupView: View {
         .background(Theme.background)
         .navigationTitle("Gruppo")
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: tracker.currentLocation) { _, l in
-            if let l { group.updateMe(l, lowBattery: tracker.batteryLevel >= 0 && tracker.batteryLevel < 0.2) }
-        }
+        .onChange(of: tracker.currentLocation) { _, l in push(l) }
+        .onAppear { push(tracker.currentLocation) }
+        .onChange(of: group.active) { _, on in if on { push(tracker.currentLocation) } }
+    }
+
+    private func push(_ l: CLLocation?) {
+        if let l { group.updateMe(l, lowBattery: tracker.batteryLevel >= 0 && tracker.batteryLevel < 0.2) }
     }
 
     // MARK: Prima di entrare
