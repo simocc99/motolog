@@ -4,3 +4,8 @@ DerivedData/
 .DS_Store
 *.ipa
 xcuserdata/
+
+# Android app
+android-app/node_modules/
+android-app/android/
+android-app/.expo/

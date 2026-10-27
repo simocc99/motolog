@@ -1,0 +1,54 @@
+name: Build Android
+
+on:
+  push:
+    branches: [main]
+    paths: ['android-app/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Build release APK
+        working-directory: android-app/android
+        run: ./gradlew assembleRelease --no-daemon -q
+
+      - name: Collect APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk MotoLog-android.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MotoLog-android-apk
+          path: android-app/MotoLog-android.apk
+
+      - name: Publish latest-android release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest-android --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest-android MotoLog-android.apk --title "MotoLog Android (ultima build)" --notes "APK non firmata da store, firmata con chiave di debug: abilita 'origini sconosciute' e installa." --target "$GITHUB_SHA"
