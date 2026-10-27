@@ -13,6 +13,7 @@ struct RecordView: View {
     @State private var summary: IdentifiedID?
     @State private var showFuel = false
     @State private var showPreflight = false
+    @Environment(\.verticalSizeClass) private var vSize
     @AppStorage("preflight") private var preflight = false
 
     var body: some View {
@@ -72,6 +73,40 @@ struct RecordView: View {
     // MARK: Cruscotto
 
     private var dashboard: some View {
+        Group {
+            if vSize == .compact { landscapeDashboard } else { portraitDashboard }
+        }
+    }
+
+    /// In orizzontale: tachimetro a sinistra e tutti i dati a destra, senza scorrere.
+    private var landscapeDashboard: some View {
+        VStack(spacing: 8) {
+            header
+            if tracker.overLimit {
+                Chip(text: "LIMITE DI VELOCITÀ SUPERATO", icon: "exclamationmark.triangle.fill", tint: .red)
+            }
+            HStack(spacing: 16) {
+                SpeedGauge(speed: tracker.speed)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+                    DashCell(title: "Distanza", value: Fmt.distText(tracker.distance), unit: Fmt.distUnit)
+                    DashCell(title: "Tempo", value: Fmt.duration(tracker.elapsed), unit: "")
+                    DashCell(title: "Media", value: Fmt.speedText(tracker.movingTime > 0 ? tracker.distance / tracker.movingTime : 0), unit: Fmt.speedUnit)
+                    DashCell(title: "Max", value: Fmt.speedText(tracker.maxSpeed), unit: Fmt.speedUnit)
+                    DashCell(title: "Piega", value: String(format: "%.0f", abs(tracker.lean)), unit: "°")
+                    DashCell(title: "Forza G", value: String(format: "%.1f", tracker.gForce), unit: "G")
+                    DashCell(title: "Salita", value: Fmt.altText(tracker.elevationGain), unit: Fmt.altUnit)
+                    DashCell(title: "Quota", value: Fmt.altText(tracker.altitude), unit: Fmt.altUnit)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+    }
+
+    private var portraitDashboard: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 12) {
                 header
