@@ -26,7 +26,9 @@ enum StoryMap {
 
     /// nil se offline o se la mappa non si riesce a scaricare: la storia usa allora lo sfondo scuro.
     static func backdrop(for ride: Ride) async -> MapBackdrop? {
-        guard ride.points.count > 1, await online() else { return nil }
+        guard ride.points.count > 1 else { return nil }
+        if let hit = cached(ride) { return hit }
+        guard await online() else { return nil }
         let coords = ride.points.map(\.coordinate)
         let mp = coords.map { MKMapPoint($0) }
         guard let minX = mp.map(\.x).min(), let maxX = mp.map(\.x).max(),
@@ -51,7 +53,27 @@ enum StoryMap {
         let step = max(1, coords.count / 200)
         var idx = Array(stride(from: 0, to: coords.count, by: step))
         if idx.last != coords.count - 1 { idx.append(coords.count - 1) }
-        return MapBackdrop(image: snap.image, points: idx.map { snap.point(for: coords[$0]) })
+        let backdrop = MapBackdrop(image: snap.image, points: idx.map { snap.point(for: coords[$0]) })
+        store(backdrop, for: ride)
+        return backdrop
+    }
+
+    // Cache su disco: la mappa di un giro non cambia, quindi si scarica una volta sola e poi vale anche offline.
+    private static func cacheURL(_ ride: Ride, _ ext: String) -> URL {
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        return dir.appendingPathComponent("story-\(ride.id.uuidString).\(ext)")
+    }
+
+    private static func cached(_ ride: Ride) -> MapBackdrop? {
+        guard let img = UIImage(contentsOfFile: cacheURL(ride, "png").path),
+              let data = try? Data(contentsOf: cacheURL(ride, "json")),
+              let pts = try? JSONDecoder().decode([[Double]].self, from: data) else { return nil }
+        return MapBackdrop(image: img, points: pts.map { CGPoint(x: $0[0], y: $0[1]) })
+    }
+
+    private static func store(_ b: MapBackdrop, for ride: Ride) {
+        try? b.image.pngData()?.write(to: cacheURL(ride, "png"), options: .atomic)
+        try? JSONEncoder().encode(b.points.map { [Double($0.x), Double($0.y)] }).write(to: cacheURL(ride, "json"), options: .atomic)
     }
 }
 
