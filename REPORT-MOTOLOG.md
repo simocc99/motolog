@@ -27,7 +27,7 @@ APK costruito da GitHub Actions (release `latest-android`).
 - Server Node testato con due client simulati nella stessa stanza.
 - **NON verificato su un telefono vero**: GPS, piega/G, registrazione a schermo spento, voce, vibrazioni, SMS,
   notifiche, fluidità reale del navigatore, consumo di batteria reale (i numeri sopra sono le tecniche applicate, non misure).
-- **Android**: vedi esito build nel messaggio; non l'ho mai eseguita su un dispositivo Android.
+- **Android**: la build su GitHub è riuscita (APK nella release `latest-android`), ma l'app non l'ho mai avviata su un dispositivo o emulatore Android: potrebbero esserci errori a runtime.
 
 ## Decisioni per te
 1. **Server del gruppo**: per usarlo fuori casa serve un PC/VPS raggiungibile (consiglio Tailscale o un `wss://`).
