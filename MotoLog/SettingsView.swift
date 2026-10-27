@@ -14,6 +14,8 @@ struct SettingsView: View {
     @AppStorage("speedLimitKmh") private var speedLimit = 130.0
     @AppStorage("preflight") private var preflight = false
     @AppStorage("saver") private var saver = false
+    @AppStorage("breakHours") private var breakHours = 0.0
+    @AppStorage("emergencyPhone") private var emergencyPhone = ""
 
     @State private var exportURL: URL?
     @State private var confirmReset = false
@@ -59,6 +61,22 @@ struct SettingsView: View {
                     Text("Batteria")
                 } footer: {
                     Text("Dopo 25 secondi senza toccare lo schermo diventa nero con solo velocità e distanza (tocca per riattivare) e la luminosità scende. Sensori meno frequenti e GPS a precisione ridotta dopo 90 secondi da fermo. Si attiva da solo se l'iPhone è in Risparmio energetico.")
+                }
+
+                Section {
+                    Picker("Promemoria pausa", selection: $breakHours) {
+                        Text("Mai").tag(0.0)
+                        Text("Ogni ora").tag(1.0)
+                        Text("Ogni 2 ore").tag(2.0)
+                        Text("Ogni 3 ore").tag(3.0)
+                    }
+                    TextField("Telefono contatto di emergenza", text: $emergencyPhone)
+                        .keyboardType(.phonePad)
+                        .textContentType(.telephoneNumber)
+                } header: {
+                    Text("Salute e sicurezza")
+                } footer: {
+                    Text("Se rilevo una caduta, potrai preparare un SMS con la tua posizione per il contatto (lo invii tu con un tocco). Il promemoria ti avvisa dopo le ore di guida scelte.")
                 }
 
                 Section {

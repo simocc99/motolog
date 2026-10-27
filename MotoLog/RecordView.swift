@@ -4,6 +4,7 @@ import MapKit
 struct RecordView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var tracker: RideTracker
+    @EnvironmentObject var group: GroupSession
     @AppStorage("keepAwake") private var keepAwake = true
 
     @State private var page = 0
@@ -13,6 +14,7 @@ struct RecordView: View {
     @State private var summary: IdentifiedID?
     @State private var showFuel = false
     @State private var showPreflight = false
+    @AppStorage("emergencyPhone") private var emergencyPhone = ""
     @AppStorage("saver") private var saverOn = false
     @State private var lastTouch = Date()
     @State private var dimmed = false
@@ -53,6 +55,9 @@ struct RecordView: View {
         }
         .alert("Possibile caduta rilevata", isPresented: $tracker.fallAlert) {
             Button("Sto bene", role: .cancel) {}
+            if !emergencyPhone.isEmpty {
+                Button("Avvisa il contatto") { sendEmergencySMS() }
+            }
             Button("Chiama il 112", role: .destructive) {
                 if let url = URL(string: "tel://112") { UIApplication.shared.open(url) }
             }
@@ -72,6 +77,11 @@ struct RecordView: View {
         .onChange(of: tracker.fuelStation) { _, s in if s != nil { showFuel = true } }
         .sheet(isPresented: $showFuel, onDismiss: { tracker.fuelStation = nil }) {
             FuelStopSheet(bike: activeBike, station: tracker.fuelStation)
+        }
+        .alert("Fai una pausa", isPresented: $tracker.breakDue) {
+            Button("Ok") {}
+        } message: {
+            Text("Guidi da un po': fermati, bevi qualcosa e sgranchisci le gambe.")
         }
         .sheet(isPresented: $showPreflight) {
             PreflightSheet(fuelNote: fuelNote) { tracker.start(bikeID: bikeID) }
@@ -126,6 +136,7 @@ struct RecordView: View {
                 }
                 sunsetBanner
                 batteryRow
+                groupBanner
                 SpeedGauge(speed: tracker.speed)
                     .frame(height: 270)
 
@@ -214,6 +225,13 @@ struct RecordView: View {
             Spacer()
         }
         .card(padding: 10)
+    }
+
+    @ViewBuilder
+    private var groupBanner: some View {
+        if group.active, let b = group.behind.first {
+            Chip(text: "\(b.rider.name) è indietro di \(NavText.distance(b.gap))", icon: "person.3.fill", tint: .red)
+        }
     }
 
     // MARK: Risparmio batteria
@@ -373,6 +391,17 @@ struct RecordView: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 10)
         .padding(.top, 6)
+    }
+
+    /// Prepara un SMS con la posizione: lo invii tu con un tocco dall'app Messaggi.
+    private func sendEmergencySMS() {
+        var body = "Possibile caduta in moto, ho bisogno di aiuto."
+        if let c = tracker.currentLocation?.coordinate {
+            body += String(format: " Sono qui: https://maps.apple.com/?ll=%.6f,%.6f", c.latitude, c.longitude)
+        }
+        let number = emergencyPhone.filter { "+0123456789".contains($0) }
+        let text = body.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if let url = URL(string: "sms:\(number)&body=\(text)") { UIApplication.shared.open(url) }
     }
 
     private func finishRide() {

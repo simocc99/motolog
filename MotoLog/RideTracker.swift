@@ -34,6 +34,9 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var currentLocation: CLLocation?
     /// Vero quando superi il limite impostato in Altro.
     @Published var overLimit = false
+    /// Vero quando è ora di fare una pausa (promemoria impostato in Altro).
+    @Published var breakDue = false
+    private var lastBreakAt: TimeInterval = 0
 
     /// Chiamato periodicamente con la bozza del giro, per poterlo recuperare se l'app viene chiusa.
     var draftHandler: ((Ride?) -> Void)?
@@ -189,6 +192,7 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         stopSince = nil; lastStationCheck = nil; fuelStation = nil
         overLimit = false
         slowSince = nil; parkedMode = false
+        breakDue = false; lastBreakAt = 0
     }
 
     private func makeRide() -> Ride {
@@ -408,6 +412,19 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
             elapsed = accumulated + Date().timeIntervalSince(since)
         }
         tick += 1
+        let breakHours = UserDefaults.standard.double(forKey: "breakHours")
+        if state == .recording, breakHours > 0, elapsed - lastBreakAt >= breakHours * 3600 {
+            lastBreakAt = elapsed
+            breakDue = true
+            if UserDefaults.standard.bool(forKey: "voice") { speak("Guidi da un po'. Fai una pausa.") }
+            if UIApplication.shared.applicationState != .active {
+                let content = UNMutableNotificationContent()
+                content.title = "Fai una pausa"
+                content.body = "Sono passate \(Int(breakHours)) ore dall'ultima sosta: fermati, bevi, sgranchisci le gambe."
+                content.sound = .default
+                UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "break", content: content, trigger: nil)) { _ in }
+            }
+        }
         if tick % 60 == 0, state != .idle, points.count > 1 {
             draftHandler?(makeRide())
         }

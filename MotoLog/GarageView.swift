@@ -28,6 +28,8 @@ struct GarageView: View {
                             ParkingCard()
                             NavigationLink { ETAView() } label: { etaCard }
                                 .buttonStyle(.plain)
+                            NavigationLink { GroupView() } label: { groupCard }
+                                .buttonStyle(.plain)
                             ForEach(store.bikes) { bike in
                                 NavigationLink {
                                     BikeDetailView(bikeID: bike.id)
@@ -51,6 +53,19 @@ struct GarageView: View {
 }
 
 extension GarageView {
+    fileprivate var groupCard: some View {
+        HStack(spacing: 14) {
+            IconBadge(icon: "person.3.fill", size: 44)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Gruppo").font(.headline)
+                Text("Dove sono gli altri e chi resta indietro").font(.caption).foregroundStyle(Theme.dim)
+            }
+            Spacer()
+            Image(systemName: "chevron.right").foregroundStyle(Theme.dim)
+        }
+        .card()
+    }
+
     fileprivate var etaCard: some View {
         HStack(spacing: 14) {
             IconBadge(icon: "flag.checkered", size: 44)
