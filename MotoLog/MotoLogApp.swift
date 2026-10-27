@@ -8,7 +8,8 @@ struct MotoLogApp: App {
     init() {
         UserDefaults.standard.register(defaults: [
             "keepAwake": true, "voice": false, "fallDetection": false, "units": "metric",
-            "theme": "dark", "monthlyGoalKm": 300.0
+            "theme": "dark", "monthlyGoalKm": 300.0,
+            "speedAlert": false, "speedLimitKmh": 130.0, "preflight": false
         ])
         let tab = UITabBarAppearance()
         tab.configureWithOpaqueBackground()

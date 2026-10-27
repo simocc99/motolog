@@ -12,6 +12,8 @@ struct RecordView: View {
     @State private var showStopDialog = false
     @State private var summary: IdentifiedID?
     @State private var showFuel = false
+    @State private var showPreflight = false
+    @AppStorage("preflight") private var preflight = false
 
     var body: some View {
         ZStack {
@@ -59,6 +61,9 @@ struct RecordView: View {
         .sheet(isPresented: $showFuel, onDismiss: { tracker.fuelStation = nil }) {
             FuelStopSheet(bike: activeBike, station: tracker.fuelStation)
         }
+        .sheet(isPresented: $showPreflight) {
+            PreflightSheet(fuelNote: fuelNote) { tracker.start(bikeID: bikeID) }
+        }
         .sheet(item: $summary) { item in
             NavigationStack { RideDetailView(rideID: item.id, isSheet: true) }
         }
@@ -70,6 +75,10 @@ struct RecordView: View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 12) {
                 header
+                if tracker.overLimit {
+                    Chip(text: "LIMITE DI VELOCITÀ SUPERATO", icon: "exclamationmark.triangle.fill", tint: .red)
+                }
+                sunsetBanner
                 SpeedGauge(speed: tracker.speed)
                     .frame(height: 270)
 
@@ -128,6 +137,36 @@ struct RecordView: View {
             fuelChip
             gpsChip
         }
+    }
+
+    private var fuelNote: String? {
+        guard let bike = activeBike, let st = store.fuelState(for: bike) else { return nil }
+        return String(format: "Stimati %.1f L · %d km", st.liters, Int(st.range))
+    }
+
+    @ViewBuilder
+    private var sunsetBanner: some View {
+        if let loc = tracker.currentLocation,
+           let sun = Sun.sunset(on: Date(), lat: loc.coordinate.latitude, lon: loc.coordinate.longitude) {
+            let mins = Int(sun.timeIntervalSinceNow / 60)
+            if (0...60).contains(mins) {
+                banner("Tramonto tra \(mins) min", "Tieni a portata la visiera chiara e controlla i fari.")
+            } else if (-45..<0).contains(mins) {
+                banner("Il sole è tramontato", "Visibilità ridotta: fari accesi e attenzione alla fauna.")
+            }
+        }
+    }
+
+    private func banner(_ title: String, _ text: String) -> some View {
+        HStack(spacing: 12) {
+            IconBadge(icon: "sunset.fill", tint: .orange, size: 36)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.subheadline.weight(.bold))
+                Text(text).font(.caption).foregroundStyle(Theme.dim)
+            }
+            Spacer()
+        }
+        .card(padding: 10)
     }
 
     private var activeBike: Bike? { store.bike(tracker.state == .idle ? bikeID : tracker.bikeID) }
@@ -200,7 +239,9 @@ struct RecordView: View {
                     Text("Abilita la posizione in Impostazioni › MotoLog per registrare i giri.")
                         .font(.footnote).foregroundStyle(.red).multilineTextAlignment(.center)
                 }
-                Button { tracker.start(bikeID: bikeID) } label: {
+                Button {
+                    if preflight { showPreflight = true } else { tracker.start(bikeID: bikeID) }
+                } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "play.fill")
                         Text("INIZIA GIRO")
@@ -245,6 +286,7 @@ struct RecordView: View {
 
     private func finishRide() {
         if let ride = tracker.finish() {
+            if let last = ride.points.last { ParkingCard.save(last.coordinate) }
             store.addRide(ride)
             summary = IdentifiedID(id: ride.id)
         }

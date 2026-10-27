@@ -10,6 +10,9 @@ struct SettingsView: View {
     @AppStorage("keepAwake") private var keepAwake = true
     @AppStorage("voice") private var voice = false
     @AppStorage("fallDetection") private var fallDetection = false
+    @AppStorage("speedAlert") private var speedAlert = false
+    @AppStorage("speedLimitKmh") private var speedLimit = 130.0
+    @AppStorage("preflight") private var preflight = false
 
     @State private var exportURL: URL?
     @State private var confirmReset = false
@@ -49,6 +52,20 @@ struct SettingsView: View {
                     Toggle("Annunci vocali ogni chilometro", isOn: $voice)
                     Toggle("Rilevamento caduta", isOn: $fallDetection)
                 }
+                Section {
+                    Toggle("Avviso di velocità", isOn: $speedAlert)
+                    if speedAlert {
+                        Stepper(value: $speedLimit, in: 30...250, step: 10) {
+                            LabeledContent("Limite", value: "\(Int(speedLimit)) km/h")
+                        }
+                    }
+                    Toggle("Controllo prima di partire", isOn: $preflight)
+                } header: {
+                    Text("Sicurezza")
+                } footer: {
+                    Text("L'avviso vibra e suona quando superi il limite. Il controllo mostra una lista (gomme, freni, luci, guanti e paraschiena…) prima di iniziare il giro.")
+                }
+
                 Section {
                     Button(calibrated ? "Calibrato ✓" : "Calibra angolo di piega") {
                         tracker.calibrateLean()

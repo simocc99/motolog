@@ -25,6 +25,7 @@ struct GarageView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: 12) {
+                            ParkingCard()
                             NavigationLink { ETAView() } label: { etaCard }
                                 .buttonStyle(.plain)
                             ForEach(store.bikes) { bike in

@@ -115,6 +115,7 @@ struct RideDetailView: View {
                 }
 
                 stats(ride)
+                RideAnalysisCard(ride: ride)
                 chartCard(ride)
 
                 VStack(alignment: .leading, spacing: 6) {

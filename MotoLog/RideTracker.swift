@@ -5,6 +5,7 @@ import AVFoundation
 import UIKit
 import MapKit
 import UserNotifications
+import AudioToolbox
 
 enum RideState { case idle, recording, paused }
 
@@ -29,6 +30,10 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var accuracy: Double = -1
     /// Nome del distributore vicino quando ti fermi: la schermata chiede i litri.
     @Published var fuelStation: String?
+    /// Ultima posizione valida (anche a moto ferma): serve a parcheggio e tramonto.
+    @Published var currentLocation: CLLocation?
+    /// Vero quando superi il limite impostato in Altro.
+    @Published var overLimit = false
 
     /// Chiamato periodicamente con la bozza del giro, per poterlo recuperare se l'app viene chiusa.
     var draftHandler: ((Ride?) -> Void)?
@@ -55,6 +60,7 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     private var speedBeforeImpact = 0.0
     private var tick = 0
     private var stopSince: Date?
+    private var lastSpeedAlert = Date.distantPast
     private var lastStationCheck: CLLocation?
     private var checkingStation = false
 
@@ -146,6 +152,7 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         announcedKm = 0; impactTime = nil; fallAlert = false
         lastPointTime = .distantPast
         stopSince = nil; lastStationCheck = nil; fuelStation = nil
+        overLimit = false
     }
 
     private func makeRide() -> Ride {
@@ -217,6 +224,7 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
             accuracy = loc.horizontalAccuracy
             guard loc.horizontalAccuracy >= 0, loc.horizontalAccuracy <= 35 else { continue }
             altitude = loc.altitude
+            currentLocation = loc
 
             var v = loc.speed
             if v < 0 {
@@ -230,6 +238,7 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
 
             guard state == .recording else { continue }
             watchForStation(loc, speed: v)
+            checkSpeedLimit(v)
 
             // Scarta i salti GPS impossibili (oltre ~430 km/h tra due fix ravvicinati).
             if let last = lastLocation {
@@ -259,6 +268,19 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
             }
             announceIfNeeded()
         }
+    }
+
+    /// Avviso di velocità: vibrazione, suono e voce (se attiva) al massimo ogni 20 secondi.
+    private func checkSpeedLimit(_ v: Double) {
+        let d = UserDefaults.standard
+        guard d.bool(forKey: "speedAlert") else { if overLimit { overLimit = false }; return }
+        let over = v * 3.6 > max(d.double(forKey: "speedLimitKmh"), 30)
+        if over != overLimit { overLimit = over }
+        guard over, Date().timeIntervalSince(lastSpeedAlert) > 20 else { return }
+        lastSpeedAlert = Date()
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        AudioServicesPlaySystemSound(1005)
+        if d.bool(forKey: "voice") { speak("Attenzione, limite di velocità superato.") }
     }
 
     /// Fermo da più di 40 s: se nei 100 m c'è un distributore, propone di registrare il rifornimento.
