@@ -14,17 +14,16 @@ struct RecordView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Theme.background
             VStack(spacing: 0) {
                 TabView(selection: $page) {
                     dashboard.tag(0)
                     mapPage.tag(1)
                 }
-                .tabViewStyle(.page(indexDisplayMode: .always))
+                .tabViewStyle(.page(indexDisplayMode: .never))
                 controls
             }
         }
-        .preferredColorScheme(.dark)
         .onChange(of: tracker.state) { _, new in
             UIApplication.shared.isIdleTimerDisabled = keepAwake && new == .recording
         }
@@ -63,39 +62,75 @@ struct RecordView: View {
     // MARK: Cruscotto
 
     private var dashboard: some View {
-        VStack(spacing: 14) {
-            Spacer(minLength: 4)
-            VStack(spacing: -6) {
-                Text(Fmt.speedText(tracker.speed))
-                    .font(.system(size: 130, weight: .heavy, design: .rounded))
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                    .foregroundStyle(Fmt.speedColor(tracker.speed))
-                Text(Fmt.speedUnit).font(.title3.weight(.semibold)).foregroundStyle(.secondary)
-            }
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 12) {
+                header
+                SpeedGauge(speed: tracker.speed)
+                    .frame(height: 270)
 
-            HStack(alignment: .center, spacing: 18) {
-                LeanGauge(lean: tracker.lean, maxLeft: tracker.maxLeft, maxRight: tracker.maxRight, dark: true)
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                HStack(spacing: 12) {
+                    LeanArc(lean: tracker.lean, maxLeft: tracker.maxLeft, maxRight: tracker.maxRight)
+                        .frame(maxWidth: .infinity)
+                        .card(padding: 12)
+                    VStack(alignment: .leading, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("FORZA G").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.dim)
+                            Text(String(format: "%.1f", tracker.gForce))
+                                .font(.system(size: 30, weight: .heavy, design: .rounded)).monospacedDigit()
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("G MAX").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.dim)
+                            Text(String(format: "%.1f", tracker.maxG))
+                                .font(.system(size: 22, weight: .bold, design: .rounded)).monospacedDigit()
+                                .foregroundStyle(Theme.accent)
+                        }
+                    }
+                    .card(padding: 14)
+                    .frame(width: 104)
+                }
+
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
                     DashCell(title: "Distanza", value: Fmt.distText(tracker.distance), unit: Fmt.distUnit)
                     DashCell(title: "Tempo", value: Fmt.duration(tracker.elapsed), unit: "")
                     DashCell(title: "Media", value: Fmt.speedText(tracker.movingTime > 0 ? tracker.distance / tracker.movingTime : 0), unit: Fmt.speedUnit)
                     DashCell(title: "Max", value: Fmt.speedText(tracker.maxSpeed), unit: Fmt.speedUnit)
-                    DashCell(title: "Quota", value: Fmt.altText(tracker.altitude), unit: Fmt.altUnit)
                     DashCell(title: "Salita", value: Fmt.altText(tracker.elevationGain), unit: Fmt.altUnit)
+                    DashCell(title: "Quota", value: Fmt.altText(tracker.altitude), unit: Fmt.altUnit)
                 }
             }
-            .padding(.horizontal)
-
-            HStack(spacing: 24) {
-                Label(String(format: "%.1f G", tracker.gForce), systemImage: "arrow.up.and.down.and.arrow.left.and.right")
-                Label(String(format: "max %.1f G", tracker.maxG), systemImage: "bolt.fill")
-            }
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(.secondary)
-            Spacer(minLength: 24)
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
         }
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            switch tracker.state {
+            case .recording: Chip(text: "IN REGISTRAZIONE", icon: "circle.fill", tint: .red)
+            case .paused: Chip(text: "IN PAUSA", icon: "pause.fill", tint: .yellow)
+            case .idle: Chip(text: "PRONTO", icon: "checkmark.circle.fill", tint: .green)
+            }
+            Spacer()
+            if tracker.state == .idle, !store.bikes.isEmpty {
+                Menu {
+                    ForEach(store.bikes) { b in Button(b.name) { bikeID = b.id } }
+                    Button("Nessuna moto") { bikeID = nil }
+                } label: {
+                    Chip(text: store.bike(bikeID)?.name ?? "Nessuna moto", icon: "scooter", tint: Theme.accent)
+                }
+            }
+            gpsChip
+        }
+    }
+
+    private var gpsChip: some View {
+        let acc = tracker.accuracy
+        if !tracker.isAuthorized { return Chip(text: "NO GPS", icon: "location.slash.fill", tint: .red) }
+        if acc < 0 { return Chip(text: "GPS…", icon: "location", tint: Theme.dim) }
+        if acc <= 10 { return Chip(text: "GPS OTTIMO", icon: "location.fill", tint: .green) }
+        if acc <= 25 { return Chip(text: "GPS OK", icon: "location.fill", tint: .yellow) }
+        return Chip(text: "GPS DEBOLE", icon: "location.fill", tint: .orange)
     }
 
     // MARK: Mappa
@@ -105,7 +140,7 @@ struct RecordView: View {
             UserAnnotation()
             if tracker.points.count > 1 {
                 MapPolyline(coordinates: tracker.points.map(\.coordinate))
-                    .stroke(.orange, lineWidth: 5)
+                    .stroke(Theme.gradient, lineWidth: 6)
             }
         }
         .mapStyle(.standard(elevation: .realistic))
@@ -113,61 +148,80 @@ struct RecordView: View {
             MapCompass()
             MapUserLocationButton()
         }
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(alignment: .top) {
+            HStack(spacing: 16) {
+                Text("\(Fmt.speedText(tracker.speed)) \(Fmt.speedUnit)")
+                Text("\(Fmt.distText(tracker.distance)) \(Fmt.distUnit)")
+                Text(Fmt.duration(tracker.elapsed))
+            }
+            .font(.system(size: 15, weight: .bold, design: .rounded)).monospacedDigit()
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .background(.ultraThinMaterial, in: Capsule())
+            .padding(.top, 12)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
     }
 
     // MARK: Pulsanti
 
     private var controls: some View {
-        VStack(spacing: 10) {
-            if tracker.state == .idle {
-                if !store.bikes.isEmpty {
-                    Picker("Moto", selection: $bikeID) {
-                        Text("Nessuna moto").tag(UUID?.none)
-                        ForEach(store.bikes) { b in Text(b.name).tag(UUID?.some(b.id)) }
-                    }
-                    .pickerStyle(.menu)
+        VStack(spacing: 12) {
+            HStack(spacing: 6) {
+                ForEach(0..<2, id: \.self) { i in
+                    Capsule().fill(i == page ? Theme.accent : Color.white.opacity(0.2))
+                        .frame(width: i == page ? 18 : 6, height: 6)
                 }
+            }
+            .animation(.easeOut(duration: 0.2), value: page)
+
+            if tracker.state == .idle {
                 if !tracker.isAuthorized && tracker.authorization != .notDetermined {
                     Text("Abilita la posizione in Impostazioni › MotoLog per registrare i giri.")
                         .font(.footnote).foregroundStyle(.red).multilineTextAlignment(.center)
                 }
-                Button {
-                    tracker.start(bikeID: bikeID)
-                } label: {
-                    Text("INIZIA GIRO")
-                        .font(.title3.weight(.heavy))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Color.orange, in: Capsule())
-                        .foregroundStyle(.black)
+                Button { tracker.start(bikeID: bikeID) } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "play.fill")
+                        Text("INIZIA GIRO")
+                    }
+                    .font(.title3.weight(.heavy))
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 18)
+                    .background(Theme.gradient, in: Capsule())
+                    .shadow(color: Theme.accent.opacity(0.45), radius: 18, y: 6)
                 }
             } else {
-                HStack(spacing: 14) {
+                HStack(spacing: 12) {
                     Button {
                         tracker.state == .recording ? tracker.pause() : tracker.resume()
                     } label: {
                         Label(tracker.state == .recording ? "PAUSA" : "RIPRENDI",
                               systemImage: tracker.state == .recording ? "pause.fill" : "play.fill")
                             .font(.headline.weight(.heavy))
+                            .foregroundStyle(.yellow)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(Color.yellow, in: Capsule())
-                            .foregroundStyle(.black)
+                            .padding(.vertical, 18)
+                            .background(Color.white.opacity(0.1), in: Capsule())
                     }
                     Button { showStopDialog = true } label: {
                         Label("FINE", systemImage: "stop.fill")
                             .font(.headline.weight(.heavy))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(Color.red, in: Capsule())
                             .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 18)
+                            .background(LinearGradient(colors: [.red, Color(red: 0.75, green: 0.1, blue: 0.15)],
+                                                       startPoint: .top, endPoint: .bottom), in: Capsule())
+                            .shadow(color: .red.opacity(0.35), radius: 14, y: 5)
                     }
                 }
             }
         }
-        .padding(.horizontal)
-        .padding(.bottom, 8)
-        .padding(.top, 4)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
+        .padding(.top, 6)
     }
 
     private func finishRide() {
@@ -185,17 +239,19 @@ private struct DashCell: View {
     let unit: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title.uppercased()).font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title.uppercased()).font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.dim)
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
-                Text(unit).font(.system(size: 10)).foregroundStyle(.secondary)
+                if !unit.isEmpty {
+                    Text(unit).font(.system(size: 10)).foregroundStyle(Theme.dim)
+                }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .card(padding: 12)
     }
 }

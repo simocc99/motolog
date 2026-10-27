@@ -39,6 +39,24 @@ struct StatsView: View {
         return dict.map { Bucket(id: $0.key, km: $0.value) }.sorted { $0.id < $1.id }
     }
 
+    /// Intervallo dell'asse X: mostra il periodo intero anche con pochi dati.
+    private var domain: ClosedRange<Date> {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let end = cal.date(byAdding: .day, value: 1, to: today)!
+        func monthStart(_ monthsAgo: Int) -> Date {
+            cal.dateInterval(of: .month, for: cal.date(byAdding: .month, value: -monthsAgo, to: today)!)!.start
+        }
+        let start: Date
+        switch period {
+        case .week: start = cal.date(byAdding: .day, value: -6, to: today)!
+        case .month: start = cal.date(byAdding: .day, value: -29, to: today)!
+        case .year: start = monthStart(11)
+        case .all: start = min(buckets.first?.id ?? today, monthStart(5))
+        }
+        return start...end
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -69,7 +87,7 @@ struct StatsView: View {
                 }
                 .padding()
             }
-            .background(Color(.systemGroupedBackground))
+            .background(Theme.background)
             .navigationTitle("Statistiche")
         }
     }
@@ -79,13 +97,27 @@ struct StatsView: View {
         let time = rides.reduce(0) { $0 + $1.elapsed }
         let moving = rides.reduce(0) { $0 + $1.movingTime }
         let climb = rides.reduce(0) { $0 + $1.elevationGain }
-        return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-            StatTile(title: "Distanza", value: Fmt.distText(dist), unit: Fmt.distUnit, icon: "arrow.triangle.swap")
-            StatTile(title: "Giri", value: "\(rides.count)", icon: "flag.checkered")
-            StatTile(title: "Tempo in sella", value: Fmt.durationLong(time), icon: "clock")
-            StatTile(title: "Media", value: Fmt.speedText(moving > 0 ? dist / moving : 0), unit: Fmt.speedUnit, icon: "speedometer")
-            StatTile(title: "Dislivello +", value: Fmt.altText(climb), unit: Fmt.altUnit, icon: "mountain.2.fill")
-            StatTile(title: "Giro medio", value: rides.isEmpty ? "0" : Fmt.distText(dist / Double(rides.count)), unit: Fmt.distUnit, icon: "divide")
+        return VStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("DISTANZA TOTALE")
+                    .font(.system(size: 11, weight: .bold)).tracking(1.5).foregroundStyle(Theme.dim)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(Fmt.distText(dist))
+                        .font(.system(size: 60, weight: .heavy, design: .rounded))
+                        .foregroundStyle(Theme.gradient)
+                        .minimumScaleFactor(0.5).lineLimit(1)
+                    Text(Fmt.distUnit).font(.title3.weight(.semibold)).foregroundStyle(Theme.dim)
+                }
+                Text("\(rides.count) \(rides.count == 1 ? "giro" : "giri") · \(Fmt.durationLong(time)) in sella")
+                    .font(.subheadline).foregroundStyle(Theme.dim)
+            }
+            .card(padding: 18)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                StatTile(title: "Media", value: Fmt.speedText(moving > 0 ? dist / moving : 0), unit: Fmt.speedUnit, icon: "speedometer")
+                StatTile(title: "Dislivello +", value: Fmt.altText(climb), unit: Fmt.altUnit, icon: "mountain.2.fill")
+                StatTile(title: "Giro medio", value: rides.isEmpty ? "0" : Fmt.distText(dist / Double(rides.count)), unit: Fmt.distUnit, icon: "divide")
+                StatTile(title: "In movimento", value: Fmt.durationLong(moving), icon: "figure.walk.motion")
+            }
         }
     }
 
@@ -98,9 +130,10 @@ struct StatsView: View {
                 Chart(buckets) { b in
                     BarMark(x: .value("Data", b.id, unit: byDay ? .day : .month),
                             y: .value(Fmt.distUnit, b.km))
-                    .foregroundStyle(.orange.gradient)
+                    .foregroundStyle(Theme.gradient)
                     .cornerRadius(4)
                 }
+                .chartXScale(domain: domain)
                 .frame(height: 180)
             }
         }
@@ -161,7 +194,7 @@ private struct RecordRow: View {
 
     var body: some View {
         HStack {
-            Image(systemName: icon).foregroundStyle(.orange).frame(width: 26)
+            IconBadge(icon: icon, size: 34)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title).font(.subheadline)
                 if let ride {
@@ -198,7 +231,7 @@ struct AchievementsView: View {
             }
             .padding()
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Theme.background)
         .navigationTitle("Traguardi")
     }
 }

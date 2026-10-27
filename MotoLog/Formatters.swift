@@ -28,6 +28,7 @@ enum Fmt {
     static func durationLong(_ t: TimeInterval) -> String {
         let s = Int(t.rounded())
         let h = s / 3600, m = (s % 3600) / 60
+        if h == 0 && m == 0 { return "\(s)s" }
         return h > 0 ? "\(h)h \(m)m" : "\(m)m"
     }
 
@@ -40,6 +41,9 @@ enum Fmt {
 }
 
 extension Date {
-    var shortDate: String { formatted(.dateTime.day().month(.abbreviated).year()) }
-    var shortTime: String { formatted(.dateTime.hour().minute()) }
+    static let itLocale = Locale(identifier: "it_IT")
+    var shortDate: String { formatted(Date.FormatStyle(locale: Date.itLocale).day().month(.abbreviated).year()) }
+    var dayMonth: String { formatted(Date.FormatStyle(locale: Date.itLocale).day().month(.abbreviated)) }
+    var monthYear: String { formatted(Date.FormatStyle(locale: Date.itLocale).month(.wide).year()) }
+    var shortTime: String { formatted(Date.FormatStyle(locale: Date.itLocale).hour().minute()) }
 }

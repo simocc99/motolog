@@ -23,11 +23,10 @@ struct HistoryView: View {
     }
 
     private var groups: [(String, [Ride])] {
-        let fmt = Date.FormatStyle().month(.wide).year()
         var order: [String] = []
         var dict: [String: [Ride]] = [:]
         for r in filtered {
-            let key = r.start.formatted(fmt).capitalized
+            let key = r.start.monthYear.capitalized
             if dict[key] == nil { order.append(key) }
             dict[key, default: []].append(r)
         }
@@ -36,26 +35,46 @@ struct HistoryView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            ZStack {
+                Theme.background
                 if store.rides.isEmpty {
-                    ContentUnavailableView("Nessun giro", systemImage: "road.lanes",
-                                           description: Text("Registra il tuo primo giro dalla scheda Registra."))
-                } else if sort == .date {
+                    VStack(spacing: 14) {
+                        IconBadge(icon: "road.lanes", size: 64)
+                        Text("Nessun giro ancora").font(.title3.weight(.bold))
+                        Text("Registra il tuo primo giro dalla scheda Registra.")
+                            .font(.subheadline).foregroundStyle(Theme.dim).multilineTextAlignment(.center)
+                    }
+                    .padding(40)
+                } else {
                     List {
-                        ForEach(groups, id: \.0) { month, rides in
-                            Section(month) { rows(rides) }
+                        if sort == .date {
+                            ForEach(groups, id: \.0) { month, rides in
+                                Section {
+                                    rows(rides)
+                                } header: {
+                                    Text(month.uppercased())
+                                        .font(.system(size: 12, weight: .bold)).tracking(1.5)
+                                        .foregroundStyle(Theme.dim)
+                                }
+                            }
+                        } else {
+                            rows(filtered)
                         }
                     }
-                } else {
-                    List { rows(filtered) }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
             }
             .navigationTitle("Giri")
             .searchable(text: $search, prompt: "Cerca per nome o note")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Picker("Ordina", selection: $sort) {
-                        ForEach(Sort.allCases) { Text($0.rawValue).tag($0) }
+                    Menu {
+                        Picker("Ordina", selection: $sort) {
+                            ForEach(Sort.allCases) { Text($0.rawValue).tag($0) }
+                        }
+                    } label: {
+                        Image(systemName: "arrow.up.arrow.down.circle")
                     }
                 }
             }
@@ -65,46 +84,57 @@ struct HistoryView: View {
     @ViewBuilder
     private func rows(_ rides: [Ride]) -> some View {
         ForEach(rides) { ride in
-            NavigationLink {
-                RideDetailView(rideID: ride.id, isSheet: false)
-            } label: {
-                RideRow(ride: ride, bikeName: store.bike(ride.bikeID)?.name)
+            ZStack {
+                RideCard(ride: ride, bikeName: store.bike(ride.bikeID)?.name)
+                NavigationLink {
+                    RideDetailView(rideID: ride.id, isSheet: false)
+                } label: { EmptyView() }
+                .opacity(0)
             }
-        }
-        .onDelete { offsets in
-            let ids = offsets.map { rides[$0].id }
-            store.rides.removeAll { ids.contains($0.id) }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
+            .swipeActions {
+                Button(role: .destructive) {
+                    store.rides.removeAll { $0.id == ride.id }
+                } label: { Label("Elimina", systemImage: "trash") }
+            }
         }
     }
 }
 
-private struct RideRow: View {
+private struct RideCard: View {
     let ride: Ride
     let bikeName: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(ride.name).font(.headline)
-                Spacer()
-                if ride.rating > 0 {
-                    HStack(spacing: 1) {
-                        Image(systemName: "star.fill")
-                        Text("\(ride.rating)")
+        HStack(spacing: 14) {
+            RouteThumb(track: ride.points)
+                .frame(width: 72, height: 72)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text(ride.name).font(.headline).lineLimit(1)
+                    if ride.rating > 0 {
+                        Image(systemName: "star.fill").font(.caption2).foregroundStyle(.yellow)
                     }
-                    .font(.caption).foregroundStyle(.yellow)
+                }
+                Text("\(ride.start.dayMonth) · \(ride.start.shortTime)" + (bikeName.map { " · \($0)" } ?? ""))
+                    .font(.caption).foregroundStyle(Theme.dim).lineLimit(1)
+                HStack(spacing: 6) {
+                    Chip(text: Fmt.durationLong(ride.elapsed), icon: "clock")
+                    Chip(text: "\(Fmt.speedText(ride.maxSpeed))", icon: "speedometer")
                 }
             }
-            Text("\(ride.start.shortDate) · \(ride.start.shortTime)" + (bikeName.map { " · \($0)" } ?? ""))
-                .font(.caption).foregroundStyle(.secondary)
-            HStack(spacing: 16) {
-                Label("\(Fmt.distText(ride.distance)) \(Fmt.distUnit)", systemImage: "arrow.triangle.swap")
-                Label(Fmt.durationLong(ride.elapsed), systemImage: "clock")
-                Label("\(Fmt.speedText(ride.maxSpeed)) \(Fmt.speedUnit)", systemImage: "speedometer")
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: -2) {
+                Text(Fmt.distText(ride.distance))
+                    .font(.system(size: 28, weight: .heavy, design: .rounded))
+                    .foregroundStyle(Theme.gradient)
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                Text(Fmt.distUnit).font(.caption.weight(.semibold)).foregroundStyle(Theme.dim)
             }
-            .font(.caption.weight(.medium))
-            .foregroundStyle(.orange)
         }
-        .padding(.vertical, 3)
+        .card(padding: 12)
     }
 }

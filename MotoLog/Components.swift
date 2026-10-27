@@ -1,16 +1,73 @@
 import SwiftUI
+import CoreLocation
+
+enum Theme {
+    static let bg = Color(red: 0.035, green: 0.035, blue: 0.05)
+    static let card = Color(red: 0.085, green: 0.085, blue: 0.11)
+    static let stroke = Color.white.opacity(0.08)
+    static let accent = Color(red: 1.0, green: 0.56, blue: 0.08)
+    static let accent2 = Color(red: 1.0, green: 0.30, blue: 0.22)
+    static let dim = Color.white.opacity(0.55)
+
+    static var gradient: LinearGradient {
+        LinearGradient(colors: [accent, accent2], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    /// Sfondo con un leggero bagliore arancione in alto.
+    static var background: some View {
+        ZStack {
+            bg
+            RadialGradient(colors: [accent.opacity(0.16), .clear], center: .top, startRadius: 10, endRadius: 460)
+        }
+        .ignoresSafeArea()
+    }
+}
 
 struct CardStyle: ViewModifier {
+    var padding: CGFloat = 16
+
     func body(content: Content) -> some View {
         content
-            .padding(14)
+            .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Theme.card))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Theme.stroke, lineWidth: 1))
     }
 }
 
 extension View {
-    func card() -> some View { modifier(CardStyle()) }
+    func card(padding: CGFloat = 16) -> some View { modifier(CardStyle(padding: padding)) }
+}
+
+struct IconBadge: View {
+    let icon: String
+    var tint: Color = Theme.accent
+    var size: CGFloat = 30
+
+    var body: some View {
+        Image(systemName: icon)
+            .font(.system(size: size * 0.46, weight: .semibold))
+            .foregroundStyle(tint)
+            .frame(width: size, height: size)
+            .background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: size * 0.32, style: .continuous))
+    }
+}
+
+struct Chip: View {
+    let text: String
+    var icon: String? = nil
+    var tint: Color = Theme.dim
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if let icon { Image(systemName: icon).font(.system(size: 10, weight: .bold)) }
+            Text(text).font(.system(size: 12, weight: .semibold, design: .rounded)).monospacedDigit()
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .foregroundStyle(tint)
+        .background(tint.opacity(0.14), in: Capsule())
+    }
 }
 
 struct StatTile: View {
@@ -18,70 +75,144 @@ struct StatTile: View {
     let value: String
     var unit: String = ""
     var icon: String = ""
-    var tint: Color = .orange
+    var tint: Color = Theme.accent
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 5) {
-                if !icon.isEmpty {
-                    Image(systemName: icon).font(.caption).foregroundStyle(tint)
-                }
+        HStack(spacing: 10) {
+            if !icon.isEmpty { IconBadge(icon: icon, tint: tint) }
+            VStack(alignment: .leading, spacing: 1) {
                 Text(title.uppercased())
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value)
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.6)
+                    .foregroundStyle(Theme.dim)
                     .lineLimit(1)
-                if !unit.isEmpty {
-                    Text(unit).font(.caption).foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(value)
+                        .font(.system(size: 21, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
+                    if !unit.isEmpty {
+                        Text(unit).font(.caption).foregroundStyle(Theme.dim)
+                    }
                 }
             }
+            Spacer(minLength: 0)
         }
-        .card()
+        .card(padding: 12)
     }
 }
 
-/// Indicatore di piega: la moto ruota in base all'angolo.
-struct LeanGauge: View {
+/// Tachimetro ad arco con gradiente verde → rosso.
+struct SpeedGauge: View {
+    let speed: Double   // m/s
+
+    var body: some View {
+        let top = Fmt.imperial ? 125.0 : 200.0
+        let p = min(max(Fmt.speed(speed) / top, 0), 1)
+        ZStack {
+            ZStack {
+                Circle().trim(from: 0, to: 0.75)
+                    .stroke(Color.white.opacity(0.08), style: StrokeStyle(lineWidth: 20, lineCap: .round))
+                Circle().trim(from: 0, to: 0.75)
+                    .stroke(AngularGradient(colors: [.green, .yellow, .orange, .red],
+                                            center: .center, startAngle: .degrees(0), endAngle: .degrees(270)),
+                            style: StrokeStyle(lineWidth: 20, lineCap: .round))
+                    .mask(Circle().trim(from: 0, to: 0.75 * p)
+                        .stroke(style: StrokeStyle(lineWidth: 24, lineCap: .round)))
+            }
+            .rotationEffect(.degrees(135))
+            .animation(.easeOut(duration: 0.4), value: p)
+
+            VStack(spacing: -2) {
+                Text(Fmt.speedText(speed))
+                    .font(.system(size: 96, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                Text(Fmt.speedUnit.uppercased())
+                    .font(.system(size: 13, weight: .bold))
+                    .tracking(3)
+                    .foregroundStyle(Theme.dim)
+            }
+            .offset(y: -6)
+        }
+        .padding(14)
+    }
+}
+
+/// Semicerchio con indicatore dell'angolo di piega (±45°).
+struct LeanArc: View {
     let lean: Double
     let maxLeft: Double
     let maxRight: Double
-    var dark = false
 
     var body: some View {
-        VStack(spacing: 6) {
+        let angle = max(-45, min(45, lean)) * 2 * .pi / 180
+        let hot = abs(lean) > 30
+        VStack(spacing: 8) {
             ZStack {
-                Circle().stroke(Color.gray.opacity(0.35), lineWidth: 6)
-                ForEach([-45.0, -30.0, -15.0, 0, 15.0, 30.0, 45.0], id: \.self) { a in
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.6))
-                        .frame(width: 2, height: a == 0 ? 12 : 8)
-                        .offset(y: -58)
-                        .rotationEffect(.degrees(a))
-                }
-                Capsule()
-                    .fill(abs(lean) > 30 ? Color.red : Color.orange)
-                    .frame(width: 8, height: 90)
-                    .rotationEffect(.degrees(lean))
+                Circle().trim(from: 0.5, to: 1)
+                    .stroke(Color.white.opacity(0.1), style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                    .frame(width: 140, height: 140)
+                    .position(x: 75, y: 75)
+                Circle()
+                    .fill(hot ? Color.red : Theme.accent)
+                    .frame(width: 18, height: 18)
+                    .shadow(color: (hot ? Color.red : Theme.accent).opacity(0.7), radius: 6)
+                    .position(x: 75 + 70 * sin(angle), y: 75 - 70 * cos(angle))
                     .animation(.easeOut(duration: 0.12), value: lean)
-                Text(String(format: "%.0f°", abs(lean)))
-                    .font(.system(size: 22, weight: .heavy, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(dark ? .white : .primary)
-                    .offset(y: 38)
+                VStack(spacing: -2) {
+                    Text(String(format: "%.0f°", abs(lean)))
+                        .font(.system(size: 30, weight: .heavy, design: .rounded))
+                        .monospacedDigit()
+                    Text("PIEGA").font(.system(size: 9, weight: .bold)).tracking(2).foregroundStyle(Theme.dim)
+                }
+                .position(x: 75, y: 52)
             }
-            .frame(width: 130, height: 130)
-            HStack(spacing: 14) {
+            .frame(width: 150, height: 82)
+            HStack {
                 Label(String(format: "%.0f°", maxLeft), systemImage: "arrow.left")
+                Spacer()
                 Label(String(format: "%.0f°", maxRight), systemImage: "arrow.right")
             }
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .foregroundStyle(Theme.dim)
+            .frame(width: 150)
         }
+    }
+}
+
+struct RouteShape: Shape {
+    let pts: [CLLocationCoordinate2D]
+
+    func path(in rect: CGRect) -> Path {
+        guard pts.count > 1,
+              let minLat = pts.map(\.latitude).min(), let maxLat = pts.map(\.latitude).max(),
+              let minLon = pts.map(\.longitude).min(), let maxLon = pts.map(\.longitude).max() else { return Path() }
+        let k = cos((minLat + maxLat) / 2 * .pi / 180)
+        let w = (maxLon - minLon) * k, h = maxLat - minLat
+        let scale = min(rect.width, rect.height) / max(w, h, 1e-9)
+        let ox = rect.midX - w * scale / 2, oy = rect.midY - h * scale / 2
+        var path = Path()
+        for (i, c) in pts.enumerated() {
+            let pt = CGPoint(x: ox + (c.longitude - minLon) * k * scale, y: oy + (maxLat - c.latitude) * scale)
+            if i == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
+        }
+        return path
+    }
+}
+
+/// Miniatura del percorso disegnata senza mappa.
+struct RouteThumb: View {
+    let track: [TrackPoint]
+
+    var body: some View {
+        let step = max(1, track.count / 90)
+        let pts = stride(from: 0, to: track.count, by: step).map { track[$0].coordinate }
+        RouteShape(pts: pts)
+            .stroke(Theme.gradient, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+            .padding(12)
+            .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -92,7 +223,7 @@ struct StarRating: View {
         HStack(spacing: 4) {
             ForEach(1...5, id: \.self) { i in
                 Image(systemName: i <= rating ? "star.fill" : "star")
-                    .foregroundStyle(i <= rating ? Color.yellow : Color.gray.opacity(0.5))
+                    .foregroundStyle(i <= rating ? Color.yellow : Color.white.opacity(0.25))
                     .onTapGesture { rating = (rating == i ? 0 : i) }
             }
         }

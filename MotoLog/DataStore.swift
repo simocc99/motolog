@@ -21,6 +21,8 @@ final class DataStore: ObservableObject {
         deadlines = load("deadlines") ?? []
         draft = load("draft")
         rides.sort { $0.start > $1.start }
+        // Una bozza di un giro già salvato non va riproposta.
+        if let d = draft, rides.contains(where: { $0.start == d.start }) { saveDraft(nil) }
     }
 
     // MARK: Persistenza
@@ -54,7 +56,8 @@ final class DataStore: ObservableObject {
             save(ride, "draft")
         } else {
             pending["draft"]?.cancel()
-            try? FileManager.default.removeItem(at: url("draft"))
+            let target = url("draft")
+            queue.async { try? FileManager.default.removeItem(at: target) }
         }
     }
 

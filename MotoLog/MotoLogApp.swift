@@ -9,6 +9,16 @@ struct MotoLogApp: App {
         UserDefaults.standard.register(defaults: [
             "keepAwake": true, "voice": false, "fallDetection": false, "units": "metric"
         ])
+        let tab = UITabBarAppearance()
+        tab.configureWithOpaqueBackground()
+        tab.backgroundColor = UIColor(red: 0.05, green: 0.05, blue: 0.07, alpha: 1)
+        UITabBar.appearance().standardAppearance = tab
+        UITabBar.appearance().scrollEdgeAppearance = tab
+        let nav = UINavigationBarAppearance()
+        nav.configureWithTransparentBackground()
+        nav.largeTitleTextAttributes = [.font: UIFont.systemFont(ofSize: 34, weight: .heavy)]
+        UINavigationBar.appearance().standardAppearance = nav
+        UINavigationBar.appearance().scrollEdgeAppearance = nav
     }
 
     var body: some Scene {
@@ -40,6 +50,7 @@ struct RootView: View {
             SettingsView()
                 .tabItem { Label("Altro", systemImage: "gearshape") }
         }
+        .preferredColorScheme(.dark)
         .id(units)   // ricostruisce le viste quando cambiano le unità
     }
 }

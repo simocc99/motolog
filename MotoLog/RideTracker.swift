@@ -24,6 +24,7 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var fallAlert = false
     @Published var authorization: CLAuthorizationStatus = .notDetermined
     @Published var bikeID: UUID?
+    @Published var accuracy: Double = -1
 
     /// Chiamato periodicamente con la bozza del giro, per poterlo recuperare se l'app viene chiusa.
     var draftHandler: ((Ride?) -> Void)?
@@ -204,6 +205,7 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         for loc in locations {
+            accuracy = loc.horizontalAccuracy
             guard loc.horizontalAccuracy >= 0, loc.horizontalAccuracy <= 35 else { continue }
             altitude = loc.altitude
 
@@ -218,6 +220,12 @@ final class RideTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
             speed = v
 
             guard state == .recording else { continue }
+
+            // Scarta i salti GPS impossibili (oltre ~430 km/h tra due fix ravvicinati).
+            if let last = lastLocation {
+                let gap = loc.timestamp.timeIntervalSince(last.timestamp)
+                if gap > 0, gap < 60, loc.distance(from: last) / gap > 120 { continue }
+            }
 
             if let last = lastLocation {
                 let d = loc.distance(from: last)

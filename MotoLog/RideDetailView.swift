@@ -103,7 +103,7 @@ struct RideDetailView: View {
             }
             .padding()
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Theme.background)
     }
 
     // MARK: Mappa

@@ -49,6 +49,8 @@ struct SettingsView: View {
                     LabeledContent("Giri salvati", value: "\(store.rides.count)")
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
             .navigationTitle("Altro")
             .onAppear(perform: prepareExport)
             .onChange(of: store.rides.count) { _, _ in prepareExport() }

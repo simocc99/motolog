@@ -6,22 +6,32 @@ struct GarageView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            ZStack {
+                Theme.background
                 if store.bikes.isEmpty {
-                    ContentUnavailableView("Garage vuoto", systemImage: "wrench.and.screwdriver",
-                                           description: Text("Aggiungi la tua moto per tenere traccia di chilometri, tagliandi, carburante e scadenze."))
-                }
-                ForEach(store.bikes) { bike in
-                    NavigationLink {
-                        BikeDetailView(bikeID: bike.id)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(bike.name).font(.headline)
-                            Text("\([bike.brand, bike.year > 0 ? String(bike.year) : ""].filter { !$0.isEmpty }.joined(separator: " · "))")
-                                .font(.caption).foregroundStyle(.secondary)
-                            Text("\(Fmt.distText(store.odometer(of: bike) * 1000)) \(Fmt.distUnit) totali")
-                                .font(.subheadline).foregroundStyle(.orange)
+                    VStack(spacing: 14) {
+                        IconBadge(icon: "wrench.and.screwdriver", size: 64)
+                        Text("Garage vuoto").font(.title3.weight(.bold))
+                        Text("Aggiungi la tua moto per tenere traccia di chilometri, tagliandi, carburante e scadenze.")
+                            .font(.subheadline).foregroundStyle(Theme.dim).multilineTextAlignment(.center)
+                        Button { showAdd = true } label: {
+                            Text("Aggiungi moto").font(.headline).foregroundStyle(.black)
+                                .padding(.horizontal, 24).padding(.vertical, 12)
+                                .background(Theme.gradient, in: Capsule())
                         }
+                    }
+                    .padding(40)
+                } else {
+                    ScrollView {
+                        VStack(spacing: 12) {
+                            ForEach(store.bikes) { bike in
+                                NavigationLink {
+                                    BikeDetailView(bikeID: bike.id)
+                                } label: { bikeCard(bike) }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(16)
                     }
                 }
             }
@@ -33,6 +43,30 @@ struct GarageView: View {
             }
             .sheet(isPresented: $showAdd) { AddBikeSheet() }
         }
+    }
+}
+
+extension GarageView {
+    fileprivate func bikeCard(_ bike: Bike) -> some View {
+        let sub = [bike.brand, bike.year > 0 ? String(bike.year) : ""].filter { !$0.isEmpty }.joined(separator: " · ")
+        let due = store.maintenance.filter { $0.bikeID == bike.id }
+            .filter { store.odometer(of: bike) - $0.lastDoneKm >= $0.intervalKm }.count
+        return HStack(spacing: 14) {
+            IconBadge(icon: "scooter", size: 52)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(bike.name).font(.title3.weight(.bold))
+                if !sub.isEmpty { Text(sub).font(.caption).foregroundStyle(Theme.dim) }
+                if due > 0 { Chip(text: "\(due) da fare", icon: "exclamationmark.triangle.fill", tint: .orange) }
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: -2) {
+                Text(Fmt.distText(store.odometer(of: bike) * 1000))
+                    .font(.system(size: 26, weight: .heavy, design: .rounded))
+                    .foregroundStyle(Theme.gradient)
+                Text(Fmt.distUnit).font(.caption.weight(.semibold)).foregroundStyle(Theme.dim)
+            }
+        }
+        .card()
     }
 }
 
@@ -185,6 +219,8 @@ struct BikeDetailView: View {
                 Button("Elimina moto", role: .destructive) { confirmDelete = true }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(Theme.background)
         .navigationTitle(bike.name)
         .sheet(item: $sheet) { s in
             switch s {
