@@ -35,3 +35,9 @@ APK costruito da GitHub Actions (release `latest-android`).
 2. **CarPlay**: serve un entitlement Apple (account sviluppatore a pagamento) e romperebbe l'installazione gratuita.
    Dettagli in `CARPLAY.md`. Dimmi se vuoi procedere.
 3. **Chat vocale di gruppo**: richiede streaming audio (WebRTC) e un server dedicato; per ora ho fatto le posizioni.
+
+## Stato build e release (28 ottobre, ore 6:00)
+- **iOS**: ultime build GitHub Actions riuscite. IPA non firmata nella release `latest` (installa con Sideloadly/AltStore/SideStore).
+- **Android**: la prima build era fallita (mancava `expo-asset`), corretta: ultima build riuscita. APK nella release `latest-android`.
+  Abilita "origini sconosciute" per installarlo. Mai avviata su un dispositivo Android.
+- **Non fatto**: statistiche costi benzina su iOS (su Android ci sono), CarPlay, chat vocale.
